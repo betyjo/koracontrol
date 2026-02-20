@@ -1,16 +1,39 @@
 @import "tailwindcss";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Make `dark:` utilities respond to the `.dark` class on <html> */
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --background: #f8fafc;
   --foreground: #0f172a;
   --primary: #2563eb;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --border: #e2e8f0;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+.dark {
+  --background: #020617;
+  --foreground: #f8fafc;
+  --primary: #3b82f6;
+  --card: #0f172a;
+  --card-foreground: #f8fafc;
+  --border: #1e293b;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #1e293b;
+  --accent-foreground: #f8fafc;
 }
+
+@layer base {
+  body {
+    background-color: var(--background) !important;
+    color: var(--foreground) !important;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+}
+

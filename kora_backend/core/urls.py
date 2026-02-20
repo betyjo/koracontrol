@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     RegisterView, MyTokenObtainPairView, 
-    TagListView, TagLogCreateView,
+    TagListView, TagLogListCreateView,
     BillListView, InitiatePaymentView, PaymentCallbackView,
     ComplaintListCreateView, ComplaintDetailView,
     AIAnalyzeView, AIChatView,
@@ -17,7 +17,7 @@ urlpatterns = [
 
     # SCADA / Industrial Endpoints
     path('tags/', TagListView.as_view(), name='tag_list'),
-    path('logs/', TagLogCreateView.as_view(), name='log_create'),
+    path('logs/', TagLogListCreateView.as_view(), name='log_list_create'),
 
     # Billing & Payment Endpoints
     path('billing/', BillListView.as_view(), name='bill_list'),

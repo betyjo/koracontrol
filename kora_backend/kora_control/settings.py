@@ -134,7 +134,14 @@ STATIC_URL = 'static/'
 AUTH_USER_MODEL = 'core.User'
 
 # CORS Configuration
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+# Allow credentials (like JWT headers)
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False # Set to false since we are using explicit origins
 
 # REST Framework Configuration
 REST_FRAMEWORK = {

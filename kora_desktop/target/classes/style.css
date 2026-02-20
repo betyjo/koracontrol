@@ -1,0 +1,25 @@
+.root {
+    -fx-base: #1a1a1a;
+    /* Dark background */
+    -fx-control-inner-background: #2b2b2b;
+}
+
+.dashboard-card {
+    -fx-background-color: #333333;
+    -fx-border-color: #444444;
+    -fx-border-radius: 5;
+    -fx-padding: 15;
+}
+
+.status-label {
+    -fx-text-fill: #00ff00;
+    /* Neon green for values */
+    -fx-font-family: "Segoe UI Semibold";
+    -fx-font-size: 18px;
+}
+
+.tank-container {
+    -fx-border-color: #666666;
+    -fx-border-width: 3;
+    -fx-background-color: #222222;
+}

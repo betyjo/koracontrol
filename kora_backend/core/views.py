@@ -43,12 +43,12 @@ class TagListView(generics.ListCreateAPIView):
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
 
-class TagLogCreateView(generics.CreateAPIView):
+class TagLogListCreateView(generics.ListCreateAPIView):
     """
     Team 1 uses this to send actual PLC values.
     Endpoint: /api/logs/
     """
-    queryset = TagLog.objects.all()
+    queryset = TagLog.objects.all().order_by('-timestamp')
     serializer_class = TagLogSerializer
 
     def create(self, request, *args, **kwargs):

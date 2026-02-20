@@ -31,27 +31,32 @@
 ## ✨ Features
 
 ### 🔐 Authentication & Authorization
+
 - **Custom User Model** with role-based access control (Admin, Operator, Customer)
 - **JWT Authentication** with access and refresh tokens
 - **Role-based permissions** for different user types
 
 ### 🏷️ Industrial Tag Management
+
 - **Tag System** for tracking industrial sensors and equipment
 - **Tag Logs** for historical data storage
 - **Real-time data** tracking with timestamps
 
 ### 💳 Billing & Payments
+
 - **Bill Management** for customer invoices
 - **Chapa Payment Integration** for Ethiopian payment processing
 - **Payment Tracking** with transaction history
 - **Automated bill status** updates
 
 ### 🎫 Customer Support
+
 - **Complaint System** with lifecycle tracking (Pending → Investigating → Resolved)
 - **Priority Levels** (Low, Medium, High)
 - **Role-based access**: Customers see only their complaints, Staff see all
 
 ### 🤖 AI-Powered Analytics
+
 - **Anomaly Detection** for industrial sensor data
 - **AI Chat Assistant** for customer support
 - **Confidence Scoring** for AI predictions
@@ -61,15 +66,15 @@
 
 ## 🛠️ Tech Stack
 
-| Technology | Purpose |
-|------------|---------|
-| **Django 6.0** | Web framework |
-| **Django REST Framework 3.16** | API development |
-| **Simple JWT** | JWT authentication |
-| **drf-spectacular** | API documentation (Swagger/OpenAPI) |
-| **SQLite** | Database (development) |
-| **CORS Headers** | Cross-origin resource sharing |
-| **Requests** | HTTP client for Chapa integration |
+| Technology                           | Purpose                             |
+| ------------------------------------ | ----------------------------------- |
+| **Django 6.0**                 | Web framework                       |
+| **Django REST Framework 3.16** | API development                     |
+| **Simple JWT**                 | JWT authentication                  |
+| **drf-spectacular**            | API documentation (Swagger/OpenAPI) |
+| **SQLite**                     | Database (development)              |
+| **CORS Headers**               | Cross-origin resource sharing       |
+| **Requests**                   | HTTP client for Chapa integration   |
 
 ---
 
@@ -98,37 +103,44 @@ kora_backend/
 ## 🚀 Installation
 
 ### Prerequisites
+
 - Python 3.14+
 - pip
 
 ### Setup Steps
 
 1. **Clone the repository**
+
 ```bash
 cd kora_backend
 ```
 
 2. **Install dependencies**
+
 ```bash
 pip install django djangorestframework djangorestframework-simplejwt django-cors-headers requests drf-spectacular
 ```
 
 3. **Run migrations**
+
 ```bash
 python manage.py migrate
 ```
 
 4. **Create a superuser**
+
 ```bash
 python manage.py createsuperuser
 ```
 
 5. **Run the development server**
+
 ```bash
 python manage.py runserver
 ```
 
 6. **Access the API**
+
 - API Base: `http://127.0.0.1:8000/api/`
 - Admin Panel: `http://127.0.0.1:8000/admin/`
 - **Swagger Docs**: `http://127.0.0.1:8000/api/docs/`
@@ -138,9 +150,11 @@ python manage.py runserver
 ## 📚 API Documentation
 
 ### Interactive Documentation
+
 Visit **`http://127.0.0.1:8000/api/docs/`** for interactive Swagger UI documentation.
 
 ### OpenAPI Schema
+
 Download the OpenAPI schema at **`http://127.0.0.1:8000/api/schema/`**
 
 ---
@@ -148,69 +162,81 @@ Download the OpenAPI schema at **`http://127.0.0.1:8000/api/schema/`**
 ## 🌐 API Endpoints
 
 ### 🔐 Authentication
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/auth/register/` | Register a new user |
-| POST | `/api/auth/login/` | Login and get JWT tokens |
-| POST | `/api/auth/refresh/` | Refresh access token |
+
+| Method | Endpoint                | Description              |
+| ------ | ----------------------- | ------------------------ |
+| POST   | `/api/auth/register/` | Register a new user      |
+| POST   | `/api/auth/login/`    | Login and get JWT tokens |
+| POST   | `/api/auth/refresh/`  | Refresh access token     |
 
 ### 🏷️ Tags
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/tags/` | List all tags |
-| POST | `/api/tags/` | Create a new tag |
-| POST | `/api/logs/` | Create a tag log entry |
+
+| Method | Endpoint       | Description            |
+| ------ | -------------- | ---------------------- |
+| GET    | `/api/tags/` | List all tags          |
+| POST   | `/api/tags/` | Create a new tag       |
+| POST   | `/api/logs/` | Create a tag log entry |
 
 ### 💳 Billing & Payments
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/billing/` | List user's bills |
-| POST | `/api/payments/initiate/<bill_id>/` | Initiate Chapa payment |
-| GET | `/api/payments/callback/<tx_ref>/` | Payment callback (Chapa) |
+
+| Method | Endpoint                              | Description              |
+| ------ | ------------------------------------- | ------------------------ |
+| GET    | `/api/billing/`                     | List user's bills        |
+| POST   | `/api/payments/initiate/<bill_id>/` | Initiate Chapa payment   |
+| GET    | `/api/payments/callback/<tx_ref>/`  | Payment callback (Chapa) |
 
 ### 🎫 Complaints
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/complaints/` | List complaints (filtered by role) |
-| POST | `/api/complaints/` | Create a complaint |
-| GET | `/api/complaints/<id>/` | Get complaint details |
-| PATCH | `/api/complaints/<id>/` | Update complaint (staff only) |
+
+| Method | Endpoint                  | Description                        |
+| ------ | ------------------------- | ---------------------------------- |
+| GET    | `/api/complaints/`      | List complaints (filtered by role) |
+| POST   | `/api/complaints/`      | Create a complaint                 |
+| GET    | `/api/complaints/<id>/` | Get complaint details              |
+| PATCH  | `/api/complaints/<id>/` | Update complaint (staff only)      |
 
 ### 🤖 AI & Analytics
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/ai/analyze/` | Run anomaly detection on tag |
-| POST | `/api/ai/chat/` | Chat with AI assistant |
+
+| Method | Endpoint             | Description                  |
+| ------ | -------------------- | ---------------------------- |
+| POST   | `/api/ai/analyze/` | Run anomaly detection on tag |
+| POST   | `/api/ai/chat/`    | Chat with AI assistant       |
 
 ---
 
 ## 🗄️ Database Models
 
 ### User
+
 - Custom user model with roles: `admin`, `operator`, `customer`
 - Fields: `username`, `email`, `password`, `role`
 
 ### Tag
+
 - Industrial sensor/equipment tracking
 - Fields: `name`, `description`, `created_at`
 
 ### TagLog
+
 - Historical data for tags
 - Fields: `tag`, `value`, `timestamp`
 
 ### Bill
+
 - Customer invoices
 - Fields: `user`, `amount`, `usage_kwh`, `is_paid`, `created_at`
 
 ### PaymentTransaction
+
 - Payment tracking
 - Fields: `user`, `bill`, `amount`, `tx_ref`, `status`, `created_at`
 
 ### Complaint
+
 - Customer support tickets
 - Fields: `user`, `subject`, `description`, `status`, `priority`, `created_at`, `updated_at`
 
 ### AIAnalysis
+
 - AI anomaly detection results
 - Fields: `tag`, `is_anomaly`, `confidence_score`, `explanation`, `detected_at`
 
@@ -221,6 +247,7 @@ Download the OpenAPI schema at **`http://127.0.0.1:8000/api/schema/`**
 ### JWT Token Flow
 
 1. **Register**: `POST /api/auth/register/`
+
 ```json
 {
   "username": "operator1",
@@ -230,6 +257,7 @@ Download the OpenAPI schema at **`http://127.0.0.1:8000/api/schema/`**
 ```
 
 2. **Login**: `POST /api/auth/login/`
+
 ```json
 {
   "username": "operator1",
@@ -238,6 +266,7 @@ Download the OpenAPI schema at **`http://127.0.0.1:8000/api/schema/`**
 ```
 
 **Response:**
+
 ```json
 {
   "access": "eyJ0eXAiOiJKV1QiLCJhbGc...",
@@ -247,6 +276,7 @@ Download the OpenAPI schema at **`http://127.0.0.1:8000/api/schema/`**
 ```
 
 3. **Use Token**: Add to headers
+
 ```
 Authorization: Bearer <access_token>
 ```
@@ -256,13 +286,16 @@ Authorization: Bearer <access_token>
 ## 🧪 Testing
 
 ### Manual Testing
+
 Use tools like:
+
 - **Postman**
 - **Thunder Client** (VS Code)
 - **cURL**
 - **Swagger UI** (built-in at `/api/docs/`)
 
 ### Example Request
+
 ```bash
 curl -X POST http://127.0.0.1:8000/api/auth/login/ \
   -H "Content-Type: application/json" \
@@ -273,11 +306,11 @@ curl -X POST http://127.0.0.1:8000/api/auth/login/ \
 
 ## 🎯 Role-Based Access Control
 
-| Role | Permissions |
-|------|-------------|
-| **Admin** | Full access to all endpoints |
+| Role               | Permissions                                       |
+| ------------------ | ------------------------------------------------- |
+| **Admin**    | Full access to all endpoints                      |
 | **Operator** | View all data, manage complaints, run AI analysis |
-| **Customer** | View own bills, create complaints, use AI chat |
+| **Customer** | View own bills, create complaints, use AI chat    |
 
 ---
 
