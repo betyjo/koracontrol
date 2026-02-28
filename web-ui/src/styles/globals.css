@@ -1,0 +1,134 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+/* ================= BASE STYLES ================= */
+@layer base {
+  body {
+    @apply bg-[var(--background)] text-[var(--foreground)]
+           font-sans leading-relaxed antialiased;
+  }
+
+  h1 {
+    @apply text-2xl md:text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2;
+  }
+
+  h2 {
+    @apply text-xl md:text-2xl font-semibold text-gray-800 dark:text-gray-200 mb-2;
+  }
+
+  h3 {
+    @apply text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1;
+  }
+
+  p {
+    @apply text-sm md:text-base text-gray-600 dark:text-gray-400;
+  }
+
+  a {
+    @apply text-blue-600 dark:text-blue-400
+           transition-colors duration-200
+           hover:text-blue-800 dark:hover:text-blue-300;
+  }
+
+  input,
+  textarea,
+  select {
+    @apply w-full border border-gray-300 dark:border-gray-700
+           rounded-lg px-3 py-2 text-sm
+           bg-white dark:bg-gray-900
+           shadow-sm
+           transition-all duration-200
+           focus:outline-none focus:ring-2 focus:ring-blue-500;
+  }
+
+  table {
+    @apply w-full border-collapse text-sm rounded-lg overflow-hidden;
+  }
+
+  th {
+    @apply bg-gray-100 dark:bg-gray-800 text-left px-3 py-2 font-semibold;
+  }
+
+  td {
+    @apply px-3 py-2 border-b border-gray-200 dark:border-gray-700;
+  }
+}
+
+/* ================= COMPONENT STYLES ================= */
+@layer components {
+  .btn-primary {
+    @apply bg-blue-600 text-white px-4 py-2 rounded-lg
+           shadow-md
+           transition-all duration-200
+           hover:bg-blue-700 hover:shadow-lg
+           active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200
+           px-4 py-2 rounded-lg
+           shadow-sm
+           transition-all duration-200
+           hover:bg-gray-300 dark:hover:bg-gray-600
+           hover:shadow-md;
+  }
+
+  .card {
+    @apply bg-white dark:bg-gray-900
+           rounded-xl p-4
+           shadow-md
+           transition-all duration-200
+           hover:shadow-lg hover:-translate-y-1;
+  }
+
+  .nav-item {
+    @apply block px-3 py-2 rounded-md
+           text-gray-700 dark:text-gray-300
+           transition-all duration-200
+           hover:bg-blue-100 dark:hover:bg-gray-800
+           hover:text-blue-700 dark:hover:text-blue-400;
+  }
+
+  .badge-success {
+    @apply bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-warning {
+    @apply bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .badge-danger {
+    @apply bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs font-semibold;
+  }
+}
+
+@layer components {
+  .sidebar-btn {
+    @apply block px-4 py-3 rounded-lg
+           bg-[#2a241e] text-[#e7dcca]
+           shadow-md
+           transition-all duration-200
+           hover:bg-[#3a2f26]
+           hover:shadow-lg
+           hover:translate-x-1
+           active:scale-95;
+  }
+}
