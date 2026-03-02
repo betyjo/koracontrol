@@ -35,11 +35,11 @@
   }
 
   h3 {
-    @apply text-lg font-semibold text-gray-700 dark:text-gray-300 mb-1;
+    @apply text-lg font-semibold text-gray-700 dark:text-gray-700 mb-1;
   }
 
   p {
-    @apply text-sm md:text-base text-gray-600 dark:text-gray-400;
+    @apply text-sm md:text-base text-gray-700 dark:text-gray-400;
   }
 
   a {
