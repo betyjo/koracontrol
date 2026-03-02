@@ -59,7 +59,7 @@ export default function UsagePage() {
               </tr>
               <tr>
                 <td>2026-02-27</td>
-                <td>100</td>
+                <td>100</td> 
                 <td>
                   <span className="badge-success">Normal</span>
                 </td>
