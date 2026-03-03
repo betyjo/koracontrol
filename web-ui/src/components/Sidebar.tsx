@@ -22,7 +22,7 @@ import Link from "next/link";
 
 export default function Sidebar() {
   return (
-    <aside className="w-64 min-h-screen bg-[#1c1a17] text-[#e7dcca] shadow-xl">
+    <aside className="w-64 min-h-screen bg-[#1c1a17] text-[#e7dcca] shadow-xl rounded-tr-3xl rounded-br-3xl">
       {/* <div className="p-5 text-xl font-bold border-b border-[#3a2f26]">
         Kora Control
       </div> */}
