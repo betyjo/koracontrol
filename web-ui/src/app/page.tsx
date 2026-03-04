@@ -72,15 +72,15 @@ export default function Home() {
       <div className="card">
         <h1>Welcome to Kora Control</h1>
         <p>
-          Monitor your electricity usage, manage billing, and get AI-powered
-          assistance from one dashboard.
+          Monitor your water usage, manage billing, and get AI-powered
+          assistance.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
         <div className="card">
           <h3>Usage</h3>
-          <p>View your daily and monthly power consumption.</p>
+          <p>View your daily and monthly water consumption.</p>
         </div>
 
         <div className="card">
@@ -90,7 +90,7 @@ export default function Home() {
 
         <div className="card">
           <h3>AI Assistant</h3>
-          <p>Ask questions about energy usage and system status.</p>
+          <p>Ask questions about water usage and system status.</p>
         </div>
       </div>
     </div>
