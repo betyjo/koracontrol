@@ -1,14 +1,14 @@
-import joblib
-import numpy as np
 import os
 
-# Load the trained model
 MODEL_PATH = os.path.join(os.path.dirname(__file__), '../../kora_ai/anomaly_model.pkl')
+
 
 def run_anomaly_detection(tag_data):
     """
     Real AI Detection using Isolation Forest
     """
+    import joblib
+
     try:
         model = joblib.load(MODEL_PATH)
         
@@ -26,14 +26,12 @@ def run_anomaly_detection(tag_data):
         # Fallback to simple threshold if AI fails
         return False, 0.0, f"AI Model Error: {str(e)}"
 
-import google.generativeai as genai
-
-# Configure Gemini with the user's API key
-genai.configure(api_key="AIzaSyBx5AcXvKUSbfzp02mcGq9W7IV4W7HLnd8")
 
 def get_ai_chat_response(user_message):
+    import google.generativeai as genai
+
     try:
-        # Define the system instructions via the model initialization
+        genai.configure(api_key="AIzaSyBx5AcXvKUSbfzp02mcGq9W7IV4W7HLnd8")
         model = genai.GenerativeModel(
             model_name="gemini-flash-latest",
             system_instruction=(

@@ -53,3 +53,14 @@ class ComplaintUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Complaint
         fields = ['status']
+
+# 4. User Profile & Security Serializers
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'phone_number', 'role')
+        read_only_fields = ('id', 'role')
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)

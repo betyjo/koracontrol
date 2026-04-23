@@ -4,7 +4,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import User, Tag, TagLog
 from .serializers import (
     RegisterSerializer, MyTokenObtainPairSerializer, 
-    TagSerializer, TagLogSerializer
+    TagSerializer, TagLogSerializer, UserSerializer, ChangePasswordSerializer
 )
 from django.db.models import Sum, Avg, Count
 from django.utils import timezone
@@ -409,4 +409,50 @@ class RecentActivityView(generics.GenericAPIView):
         return Response({
             "activities": activities[:5]
         })
+
+# --- USER PROFILE & SETTINGS VIEWS ---
+
+class UserProfileView(generics.RetrieveUpdateAPIView):
+    """
+    Get or Update the logged-in user's profile.
+    Endpoint: /api/profile/
+    """
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+class ChangePasswordView(generics.UpdateAPIView):
+    """
+    Change the logged-in user's password.
+    Endpoint: /api/profile/change-password/
+    """
+    serializer_class = ChangePasswordSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def update(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        user = request.user
+        if not user.check_password(serializer.data.get("old_password")):
+            return Response({"old_password": ["Wrong password."]}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(serializer.data.get("new_password"))
+        user.save()
+        return Response({"message": "Password updated successfully"}, status=status.HTTP_200_OK)
+
+class DeleteAccountView(generics.DestroyAPIView):
+    """
+    Permanently delete the logged-in user's account.
+    Endpoint: /api/profile/delete/
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def perform_destroy(self, instance):
+        instance.delete()
 

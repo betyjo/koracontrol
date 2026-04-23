@@ -1,7 +1,8 @@
 "use client";
-import { useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import api from '@/lib/api';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/context/ToastContext';
 import Link from 'next/link';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { PageTransition } from '@/components/PageTransition';
@@ -12,6 +13,14 @@ export default function LoginPage() {
     const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
+    const { showToast } = useToast();
+
+    useLayoutEffect(() => {
+        const token = localStorage.getItem('token');
+        if (token) {
+            router.push('/dashboard');
+        }
+    }, [router]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -19,9 +28,10 @@ export default function LoginPage() {
         try {
             const res = await api.post('auth/login/', form);
             localStorage.setItem('token', res.data.access);
+            showToast("Logged in successfully!", "success");
             router.push('/dashboard');
         } catch {
-            alert("Invalid credentials");
+            showToast("Invalid credentials", "error");
         } finally {
             setIsLoading(false);
         }
@@ -47,21 +57,24 @@ export default function LoginPage() {
                                 onChange={(e) => setForm({ ...form, username: e.target.value })}
                             />
                         </div>
-                        <div className="relative">
+                        <div>
                             <label className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-1 block">Password</label>
-                            <input
-                                type={showPassword ? "text" : "password"}
-                                className="w-full p-4 pr-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-                                placeholder="Enter your password"
-                                onChange={(e) => setForm({ ...form, password: e.target.value })}
-                            />
-                            <button
-                                type="button"
-                                className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-                                onClick={() => setShowPassword(!showPassword)}
-                            >
-                                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                            </button>
+                            <div className="relative">
+                                <input
+                                    type={showPassword ? "text" : "password"}
+                                    className="w-full p-4 pr-12 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl dark:text-white outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                                    placeholder="Enter your password"
+                                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                                />
+                                <button
+                                    type="button"
+                                    aria-label={showPassword ? "Hide password" : "Show password"}
+                                    className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                >
+                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                </button>
+                            </div>
                         </div>
                     </div>
 

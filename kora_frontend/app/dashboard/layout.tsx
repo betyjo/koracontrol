@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useToast } from '@/context/ToastContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
 export default function DashboardLayout({
@@ -26,11 +27,13 @@ export default function DashboardLayout({
 }) {
     const pathname = usePathname();
     const router = useRouter();
+    const { showToast } = useToast();
     const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const handleLogout = () => {
         localStorage.removeItem('token');
+        showToast("Logged out successfully!", "info");
         router.push('/login');
     };
 
@@ -39,6 +42,7 @@ export default function DashboardLayout({
         { name: 'Billing', href: '/dashboard/billing', icon: Receipt },
         { name: 'Complaints', href: '/dashboard/complaints', icon: MessageSquare },
         { name: 'AI Assistant', href: '/dashboard/ai-chat', icon: Bot },
+        { name: 'Settings', href: '/dashboard/settings', icon: Settings },
     ];
 
     const toggleDesktopSidebar = () => setIsDesktopSidebarOpen(!isDesktopSidebarOpen);
@@ -52,7 +56,7 @@ export default function DashboardLayout({
                     {isDesktopSidebarOpen && (
                         <button 
                             onClick={toggleDesktopSidebar}
-                            className="flex items-center gap-2 group"
+                            className="flex items-center gap-2 group cursor-pointer"
                         >
                             <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
                                 <span className="text-white font-bold text-xl">K</span>
@@ -65,7 +69,7 @@ export default function DashboardLayout({
                     {!isDesktopSidebarOpen && (
                         <button 
                             onClick={toggleDesktopSidebar}
-                            className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 group"
+                            className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 group cursor-pointer"
                         >
                             <span className="text-white font-bold text-xl">K</span>
                         </button>
@@ -82,7 +86,7 @@ export default function DashboardLayout({
                             <Link
                                 key={item.name}
                                 href={item.href}
-                                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${isDesktopSidebarOpen ? 'justify-start' : 'justify-center'} ${isActive
+                                className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isDesktopSidebarOpen ? 'justify-start' : 'justify-center'} ${isActive
                                     ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 shadow-sm'
                                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400'
                                     }`}

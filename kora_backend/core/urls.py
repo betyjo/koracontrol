@@ -5,7 +5,8 @@ from .views import (
     BillListView, InitiatePaymentView, PaymentCallbackView,
     ComplaintListCreateView, ComplaintDetailView,
     AIAnalyzeView, AIChatView,
-    DashboardStatsView, UsageAnalyticsView, CostAnalyticsView, RecentActivityView
+    DashboardStatsView, UsageAnalyticsView, CostAnalyticsView, RecentActivityView,
+    UserProfileView, ChangePasswordView, DeleteAccountView
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -37,4 +38,9 @@ urlpatterns = [
     path('dashboard/usage/', UsageAnalyticsView.as_view(), name='usage_analytics'),
     path('dashboard/cost/', CostAnalyticsView.as_view(), name='cost_analytics'),
     path('dashboard/activity/', RecentActivityView.as_view(), name='recent_activity'),
+
+    # User Profile & Security
+    path('profile/', UserProfileView.as_view(), name='user_profile'),
+    path('profile/change-password/', ChangePasswordView.as_view(), name='change_password'),
+    path('profile/delete/', DeleteAccountView.as_view(), name='delete_account'),
 ]
