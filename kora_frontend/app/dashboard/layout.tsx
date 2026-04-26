@@ -1,5 +1,5 @@
 "use client";
-import React from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -19,6 +19,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/context/ToastContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { hasValidToken } from '@/lib/auth';
 
 export default function DashboardLayout({
     children,
@@ -31,8 +32,21 @@ export default function DashboardLayout({
     const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+    useEffect(() => {
+        if (!hasValidToken()) {
+            if (typeof window !== 'undefined' && !sessionStorage.getItem('authExpiredToastShown')) {
+                showToast("Session expired, please login again.", "info");
+                sessionStorage.setItem('authExpiredToastShown', '1');
+            }
+            router.replace('/login');
+        }
+    }, [router, showToast]);
+
     const handleLogout = () => {
         localStorage.removeItem('token');
+        if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('authExpiredToastShown');
+        }
         showToast("Logged out successfully!", "info");
         router.push('/login');
     };

@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { PageTransition } from '@/components/PageTransition';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
+import { hasValidToken } from '@/lib/auth';
 
 export default function LoginPage() {
     const [form, setForm] = useState({ username: '', password: '' });
@@ -16,8 +17,10 @@ export default function LoginPage() {
     const { showToast } = useToast();
 
     useLayoutEffect(() => {
-        const token = localStorage.getItem('token');
-        if (token) {
+        if (hasValidToken()) {
+            if (typeof window !== 'undefined') {
+                sessionStorage.removeItem('authExpiredToastShown');
+            }
             router.push('/dashboard');
         }
     }, [router]);
@@ -95,6 +98,9 @@ export default function LoginPage() {
 
                     <p className="text-center text-sm text-slate-600 dark:text-slate-400">
                         Don&apos;t have an account? <Link href="/register" className="text-blue-600 dark:text-blue-400 font-bold hover:underline">Create Account</Link>
+                    </p>
+                    <p className="text-center text-sm text-slate-600 dark:text-slate-400 mt-2">
+                        Forgot your password? <Link href="/forgot-password" className="text-blue-600 dark:text-blue-400 font-bold hover:underline">Reset here</Link>
                     </p>
                 </form>
             </PageTransition>

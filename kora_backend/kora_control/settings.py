@@ -26,7 +26,10 @@ SECRET_KEY = 'django-insecure-144u@t^3rm99itul8org=5daox4=twjzbyzsrn_kkt5p-ufkb1
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+if DEBUG:
+    # Accept LAN/dev hostnames in local development.
+    ALLOWED_HOSTS += ['*']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -138,7 +141,16 @@ AUTH_USER_MODEL = 'core.User'
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    "http://localhost:3001",
     "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+]
+
+# Allow local network frontend origins during development (e.g. http://192.168.x.x:3000).
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https?://localhost:30\d{2}$",
+    r"^https?://127\.0\.0\.1:30\d{2}$",
+    r"^https?://\d{1,3}(?:\.\d{1,3}){3}:30\d{2}$",
 ]
 
 # Allow credentials (like JWT headers)

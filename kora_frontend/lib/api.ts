@@ -1,13 +1,30 @@
 import axios from 'axios';
+import { hasValidToken } from '@/lib/auth';
+
+const normalizeBaseUrl = (url: string) => (url.endsWith('/') ? url : `${url}/`);
+
+const getApiBaseUrl = () => {
+  const envBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (envBaseUrl) {
+    return normalizeBaseUrl(envBaseUrl);
+  }
+
+  if (typeof window !== 'undefined') {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:8000/api/`;
+  }
+
+  return 'http://127.0.0.1:8000/api/';
+};
 
 const api = axios.create({
-  baseURL: 'http://127.0.0.1:8000/api/',
+  baseURL: getApiBaseUrl(),
 });
 
 // Automatically add JWT to requests
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
+  if (hasValidToken()) {
+    const token = localStorage.getItem('token');
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;

@@ -6,7 +6,8 @@ from .views import (
     ComplaintListCreateView, ComplaintDetailView,
     AIAnalyzeView, AIChatView,
     DashboardStatsView, UsageAnalyticsView, CostAnalyticsView, RecentActivityView,
-    UserProfileView, ChangePasswordView, DeleteAccountView
+    UserProfileView, ChangePasswordView, DeleteAccountView,
+    ForgotPasswordRequestView, ResetPasswordView
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -15,6 +16,8 @@ urlpatterns = [
     path('auth/register/', RegisterView.as_view(), name='auth_register'),
     path('auth/login/', MyTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/forgot-password/', ForgotPasswordRequestView.as_view(), name='forgot_password'),
+    path('auth/reset-password/', ResetPasswordView.as_view(), name='reset_password'),
 
     # SCADA / Industrial Endpoints
     path('tags/', TagListView.as_view(), name='tag_list'),
