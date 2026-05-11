@@ -4,7 +4,8 @@ from .views import (
     TagListView, TagLogListCreateView,
     BillListView, InitiatePaymentView, PaymentCallbackView,
     ComplaintListCreateView, ComplaintDetailView,
-    AIAnalyzeView, AIChatView,
+    AIAnalyzeView, AIChatView, AIThreadListCreateView, AIThreadDetailView,
+    AIThreadMessageListView, AIThreadStreamView, AIThreadAttachmentUploadView, AIThreadExportView,
     DashboardStatsView, UsageAnalyticsView, CostAnalyticsView, RecentActivityView,
     UserProfileView, ChangePasswordView, DeleteAccountView,
     ForgotPasswordRequestView, ResetPasswordView
@@ -35,6 +36,12 @@ urlpatterns = [
     # AI & Analytics Endpoints
     path('ai/analyze/', AIAnalyzeView.as_view(), name='ai_analyze'),
     path('ai/chat/', AIChatView.as_view(), name='ai_chat'),
+    path('ai/threads/', AIThreadListCreateView.as_view(), name='ai_thread_list_create'),
+    path('ai/threads/<int:pk>/', AIThreadDetailView.as_view(), name='ai_thread_detail'),
+    path('ai/threads/<int:thread_id>/messages/', AIThreadMessageListView.as_view(), name='ai_thread_messages'),
+    path('ai/threads/<int:thread_id>/chat/stream/', AIThreadStreamView.as_view(), name='ai_thread_stream'),
+    path('ai/threads/<int:thread_id>/attachments/', AIThreadAttachmentUploadView.as_view(), name='ai_thread_attachment_upload'),
+    path('ai/threads/<int:thread_id>/export/', AIThreadExportView.as_view(), name='ai_thread_export'),
 
     # Dashboard Endpoints
     path('dashboard/stats/', DashboardStatsView.as_view(), name='dashboard_stats'),

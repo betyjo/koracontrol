@@ -14,6 +14,11 @@ from django.db.models import Sum, Avg, Count
 from django.utils import timezone
 from datetime import timedelta, datetime
 import calendar
+import csv
+import io
+import json
+import mimetypes
+from django.http import StreamingHttpResponse, HttpResponse
 
 # --- AUTH VIEWS ---
 
@@ -118,6 +123,8 @@ from django.shortcuts import get_object_or_404
 from .models import Bill, PaymentTransaction, Complaint
 from .chapa_service import initialize_chapa_payment
 from .serializers import BillSerializer, ComplaintSerializer, ComplaintUpdateSerializer
+from .serializers import ChatThreadSerializer, ChatMessageSerializer, ChatAttachmentSerializer
+from django.db import transaction
 
 # --- BILLING VIEWS ---
 
@@ -202,7 +209,8 @@ class ComplaintDetailView(generics.RetrieveUpdateAPIView):
 # --- AI & ANALYTICS VIEWS ---
 
 from .ai_service import run_anomaly_detection, get_ai_chat_response
-from .models import TagLog, AIAnalysis
+from .ai_service import stream_ai_chat_response
+from .models import TagLog, AIAnalysis, ChatThread, ChatMessage, ChatAttachment
 
 class AIAnalyzeView(generics.GenericAPIView):
     def post(self, request):
@@ -232,13 +240,213 @@ class AIAnalyzeView(generics.GenericAPIView):
 
 class AIChatView(generics.GenericAPIView):
     def post(self, request):
-        user_message = request.data.get('message')
-        ai_response = get_ai_chat_response(user_message)
-        
-        return Response({
-            "response": ai_response,
-            "note": "AI Assistant is currently in beta."
-        })
+        user_message = request.data.get('message', '')
+        try:
+            ai_response = get_ai_chat_response(user_message)
+            return Response({
+                "response": ai_response,
+                "note": "AI Assistant is currently in beta."
+            })
+        except Exception:
+            return Response(
+                {
+                    "response": "AI service is temporarily unavailable. Please try again shortly.",
+                    "note": "AI Assistant is currently in beta."
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+
+class AIThreadListCreateView(generics.ListCreateAPIView):
+    serializer_class = ChatThreadSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return ChatThread.objects.filter(owner=self.request.user, is_deleted=False)
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+
+class AIThreadDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = ChatThreadSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return ChatThread.objects.filter(owner=self.request.user, is_deleted=False)
+
+    def perform_destroy(self, instance):
+        instance.is_deleted = True
+        instance.save(update_fields=['is_deleted', 'updated_at'])
+
+
+class AIThreadMessageListView(generics.ListCreateAPIView):
+    serializer_class = ChatMessageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_thread(self):
+        return get_object_or_404(
+            ChatThread,
+            id=self.kwargs['thread_id'],
+            owner=self.request.user,
+            is_deleted=False
+        )
+
+    def get_queryset(self):
+        return ChatMessage.objects.filter(thread=self.get_thread())
+
+    def create(self, request, *args, **kwargs):
+        thread = self.get_thread()
+        user_message = (request.data.get('message') or '').strip()
+        if not user_message:
+            return Response({"detail": "message is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            ChatMessage.objects.create(thread=thread, role='user', content=user_message)
+            history = list(ChatMessage.objects.filter(thread=thread).order_by('-created_at')[:12])
+            history.reverse()
+            attachments = ChatAttachment.objects.filter(thread=thread).order_by('-created_at')[:4]
+            attachment_texts = [a.extracted_text for a in attachments if a.extracted_text]
+            ai_response = get_ai_chat_response(
+                user_message=user_message,
+                user=request.user,
+                history_messages=history,
+                attachment_texts=attachment_texts,
+            )
+            ai_message = ChatMessage.objects.create(thread=thread, role='ai', content=ai_response)
+            thread.updated_at = timezone.now()
+            thread.save(update_fields=['updated_at'])
+
+        return Response(
+            {"user_message": user_message, "ai_message": ChatMessageSerializer(ai_message).data},
+            status=status.HTTP_201_CREATED
+        )
+
+
+class AIThreadStreamView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, thread_id):
+        thread = get_object_or_404(ChatThread, id=thread_id, owner=request.user, is_deleted=False)
+        user_message = (request.data.get('message') or '').strip()
+        if not user_message:
+            return Response({"detail": "message is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        user_msg = ChatMessage.objects.create(thread=thread, role='user', content=user_message)
+        history = list(ChatMessage.objects.filter(thread=thread).order_by('-created_at')[:12])
+        history.reverse()
+        attachments = ChatAttachment.objects.filter(thread=thread).order_by('-created_at')[:4]
+        attachment_texts = [a.extracted_text for a in attachments if a.extracted_text]
+
+        def event_stream():
+            chunks = []
+            for chunk in stream_ai_chat_response(
+                user_message=user_message,
+                user=request.user,
+                history_messages=history,
+                attachment_texts=attachment_texts,
+            ):
+                chunks.append(chunk)
+                payload = json.dumps({"type": "chunk", "text": chunk})
+                yield f"data: {payload}\n\n"
+
+            full_text = "".join(chunks).strip()
+            ai_msg = ChatMessage.objects.create(thread=thread, role='ai', content=full_text)
+            thread.updated_at = timezone.now()
+            thread.save(update_fields=['updated_at'])
+            payload = json.dumps(
+                {
+                    "type": "done",
+                    "message_id": ai_msg.id,
+                    "user_message_id": user_msg.id,
+                }
+            )
+            yield f"data: {payload}\n\n"
+
+        response = StreamingHttpResponse(event_stream(), content_type='text/event-stream')
+        response['Cache-Control'] = 'no-cache'
+        return response
+
+
+class AIThreadAttachmentUploadView(generics.CreateAPIView):
+    serializer_class = ChatAttachmentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    ALLOWED_TYPES = {
+        'image/png',
+        'image/jpeg',
+        'application/pdf',
+        'text/plain',
+        'text/csv',
+    }
+    MAX_FILE_SIZE = 10 * 1024 * 1024
+
+    def _extract_text(self, uploaded_file, mime_type):
+        if mime_type in {'text/plain', 'text/csv'}:
+            uploaded_file.seek(0)
+            return uploaded_file.read().decode('utf-8', errors='ignore')[:12000]
+        if mime_type == 'application/pdf':
+            try:
+                from pypdf import PdfReader
+                uploaded_file.seek(0)
+                reader = PdfReader(uploaded_file)
+                text = "\n".join((page.extract_text() or "") for page in reader.pages[:10])
+                return text[:12000]
+            except Exception:
+                return ""
+        return ""
+
+    def create(self, request, *args, **kwargs):
+        thread = get_object_or_404(ChatThread, id=self.kwargs['thread_id'], owner=request.user, is_deleted=False)
+        uploaded_file = request.FILES.get('file')
+        if not uploaded_file:
+            return Response({"detail": "file is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        mime_type = uploaded_file.content_type or mimetypes.guess_type(uploaded_file.name)[0] or ''
+        if mime_type not in self.ALLOWED_TYPES:
+            return Response({"detail": f"Unsupported file type: {mime_type}"}, status=status.HTTP_400_BAD_REQUEST)
+        if uploaded_file.size > self.MAX_FILE_SIZE:
+            return Response({"detail": "File too large. Max size is 10MB."}, status=status.HTTP_400_BAD_REQUEST)
+
+        extracted_text = self._extract_text(uploaded_file, mime_type)
+        uploaded_file.seek(0)
+        attachment = ChatAttachment.objects.create(
+            thread=thread,
+            file=uploaded_file,
+            original_name=uploaded_file.name,
+            mime_type=mime_type,
+            size_bytes=uploaded_file.size,
+            extracted_text=extracted_text,
+        )
+        serializer = self.get_serializer(attachment, context={'request': request})
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class AIThreadExportView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, thread_id):
+        thread = get_object_or_404(ChatThread, id=thread_id, owner=request.user, is_deleted=False)
+        export_format = request.query_params.get('format', 'json')
+        messages = list(thread.messages.all())
+
+        if export_format == 'csv':
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['id', 'role', 'content', 'created_at'])
+            for msg in messages:
+                writer.writerow([msg.id, msg.role, msg.content, msg.created_at.isoformat()])
+            response = HttpResponse(output.getvalue(), content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="chat-thread-{thread.id}.csv"'
+            return response
+
+        payload = {
+            "thread": ChatThreadSerializer(thread).data,
+            "messages": ChatMessageSerializer(messages, many=True).data,
+            "attachments": ChatAttachmentSerializer(thread.attachments.all(), many=True, context={'request': request}).data,
+        }
+        response = HttpResponse(json.dumps(payload, indent=2), content_type='application/json')
+        response['Content-Disposition'] = f'attachment; filename="chat-thread-{thread.id}.json"'
+        return response
 
 # --- DASHBOARD ANALYTICS VIEWS ---
 

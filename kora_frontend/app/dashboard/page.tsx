@@ -2,12 +2,23 @@
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Activity, CreditCard, MessageSquare, Loader2 } from 'lucide-react';
+import { Activity, CreditCard, MessageSquare, Loader2, Zap, Waves, ShieldCheck } from 'lucide-react';
 import { PageTransition } from '@/components/PageTransition';
 
+interface ChartPoint {
+    time: string;
+    value: number;
+}
+
+interface Stats {
+    usage: number;
+    bill: number;
+    tickets: number;
+}
+
 export default function Dashboard() {
-    const [chartData, setChartData] = useState([]);
-    const [stats, setStats] = useState({ usage: 0, bill: 0, tickets: 0 });
+    const [chartData, setChartData] = useState<ChartPoint[]>([]);
+    const [stats, setStats] = useState<Stats>({ usage: 0, bill: 1250, tickets: 0 });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -46,8 +57,40 @@ export default function Dashboard() {
         <PageTransition>
             <div className="p-6 max-w-7xl mx-auto">
                 <header className="mb-8">
-                    <h1 className="text-3xl font-bold dark:text-white">Kora Live Portal</h1>
-                    <p className="text-slate-500 dark:text-slate-400">Real-time usage monitoring</p>
+                    <div className="rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-gradient-to-br from-white via-blue-50/50 to-indigo-50/50 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 p-6 md:p-8 shadow-sm">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                            <div>
+                                <h1 className="text-3xl md:text-4xl font-bold text-slate-900 dark:text-white">
+                                    Kora Live Portal
+                                </h1>
+                                <p className="mt-2 text-slate-600 dark:text-slate-300">
+                                    A live overview of your consumption, billing, and support activity.
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 w-full md:w-auto">
+                                <MiniInsight
+                                    icon={<Zap size={16} className="text-amber-500" />}
+                                    label="Current Load"
+                                    value={`${stats.usage} units`}
+                                />
+                                <MiniInsight
+                                    icon={<Waves size={16} className="text-cyan-500" />}
+                                    label="Reading Health"
+                                    value={chartData.length > 0 ? "Stable" : "Syncing"}
+                                />
+                                <MiniInsight
+                                    icon={<ShieldCheck size={16} className="text-emerald-500" />}
+                                    label="System Status"
+                                    value="Online"
+                                />
+                                <MiniInsight
+                                    icon={<MessageSquare size={16} className="text-violet-500" />}
+                                    label="Open Tickets"
+                                    value={`${stats.tickets}`}
+                                />
+                            </div>
+                        </div>
+                    </div>
                 </header>
 
                 {loading ? (
@@ -60,25 +103,38 @@ export default function Dashboard() {
                             title="Live Reading"
                             value={`${stats.usage} units`}
                             icon={<Activity className="text-blue-500" />}
-                            trend="+2.5%"
+                            trend="Real-time"
+                            accent="from-blue-500 to-indigo-500"
                         />
                         <StatCard
                             title="Estimated Bill"
-                            value="ETB 1,250.00"
+                            value={`ETB ${stats.bill.toLocaleString()}.00`}
                             icon={<CreditCard className="text-green-500" />}
-                            trend="Normal"
+                            trend="Within range"
+                            accent="from-emerald-500 to-teal-500"
                         />
                         <StatCard
                             title="Support Tickets"
                             value={stats.tickets}
                             icon={<MessageSquare className="text-amber-500" />}
-                            trend="None"
+                            trend={stats.tickets === 0 ? "No issues" : "Needs review"}
+                            accent="from-amber-500 to-orange-500"
                         />
                     </div>
                 )}
 
-                <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border dark:border-slate-800 transition-colors duration-500">
-                    <h2 className="text-xl font-semibold mb-4 dark:text-white">Consumption History (Live)</h2>
+                <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border dark:border-slate-800 transition-colors duration-500">
+                    <div className="flex items-center justify-between gap-4 mb-5">
+                        <div>
+                            <h2 className="text-xl font-semibold dark:text-white">Consumption History (Live)</h2>
+                            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                                Last 10 readings, refreshed every 5 seconds
+                            </p>
+                        </div>
+                        <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+                            Live
+                        </span>
+                    </div>
                     <div className="h-80 w-full">
                         {chartData.length > 0 ? (
                             <ResponsiveContainer width="100%" height="100%">
@@ -126,9 +182,22 @@ export default function Dashboard() {
     );
 }
 
-function StatCard({ title, value, icon, trend }: any) {
+function StatCard({
+    title,
+    value,
+    icon,
+    trend,
+    accent,
+}: {
+    title: string;
+    value: string | number;
+    icon: React.ReactNode;
+    trend: string;
+    accent: string;
+}) {
     return (
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border dark:border-slate-800 flex items-center gap-4 transition-all duration-300 hover:shadow-md hover:scale-[1.02]">
+        <div className="relative bg-white dark:bg-slate-900 p-6 rounded-2xl shadow-sm border dark:border-slate-800 flex items-center gap-4 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 overflow-hidden">
+            <div className={`absolute top-0 left-0 h-1.5 w-full bg-gradient-to-r ${accent}`} />
             <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl transition-colors">{icon}</div>
             <div className="flex-1">
                 <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">{title}</p>
@@ -141,6 +210,26 @@ function StatCard({ title, value, icon, trend }: any) {
                     )}
                 </div>
             </div>
+        </div>
+    );
+}
+
+function MiniInsight({
+    icon,
+    label,
+    value,
+}: {
+    icon: React.ReactNode;
+    label: string;
+    value: string;
+}) {
+    return (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/70 px-3 py-2.5">
+            <div className="flex items-center gap-2 mb-1">
+                {icon}
+                <p className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
+            </div>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">{value}</p>
         </div>
     );
 }

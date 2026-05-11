@@ -10,11 +10,51 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def _load_local_env():
+    env_path = BASE_DIR / '.env'
+    env_example_path = BASE_DIR / '.env.example'
+    candidate_paths = [env_path, env_example_path]
+
+    try:
+        from dotenv import load_dotenv
+
+        for path in candidate_paths:
+            if path.exists():
+                load_dotenv(path, override=False)
+                break
+        return
+    except ImportError:
+        pass
+
+    for path in candidate_paths:
+        if not path.exists():
+            continue
+
+        try:
+            with path.open('r', encoding='utf-8') as env_file:
+                for line in env_file:
+                    line = line.strip()
+                    if not line or line.startswith('#') or '=' not in line:
+                        continue
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip().strip('"').strip("'")
+                    if key and key not in os.environ:
+                        os.environ[key] = value
+            break
+        except OSError:
+            continue
+
+
+_load_local_env()
 
 
 # Quick-start development settings - unsuitable for production
@@ -37,6 +77,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Application definition
 
 INSTALLED_APPS = [
+    'unfold',
+    'unfold.contrib.filters',
+    'unfold.contrib.forms',
+    'unfold.contrib.import_export',
+    'unfold.contrib.guardian',
+    'unfold.contrib.simple_history',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -134,6 +180,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Custom User Model
 AUTH_USER_MODEL = 'core.User'
@@ -171,4 +219,105 @@ REST_FRAMEWORK = {
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+}
+
+CHAT_ALLOWED_UPLOAD_MIME_TYPES = [
+    'image/png',
+    'image/jpeg',
+    'application/pdf',
+    'text/plain',
+    'text/csv',
+]
+CHAT_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+UNFOLD = {
+    "SITE_TITLE": "Kora Control",
+    "SITE_HEADER": "Kora Control Administration",
+    "SITE_URL": "/",
+    "SHOW_HISTORY": True,
+    "SHOW_VIEW_ON_SITE": True,
+    "STYLES": [
+        "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200",
+        f"/{STATIC_URL.strip('/')}/core/css/admin-overrides.css",
+    ],
+    "COLORS": {
+        "primary": {
+            "50": "250 250 250",
+            "100": "244 244 245",
+            "200": "228 228 231",
+            "300": "212 212 216",
+            "400": "161 161 170",
+            "500": "113 113 122",
+            "600": "82 82 91",
+            "700": "63 63 70",
+            "800": "39 39 42",
+            "900": "24 24 27",
+            "950": "9 9 11",
+        },
+    },
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": True,
+        "navigation": [
+            {
+                "title": "Authentication",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Users",
+                        "icon": "person",
+                        "link": "admin:core_user_changelist",
+                    },
+                ],
+            },
+            {
+                "title": "Kora Engine",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Tags",
+                        "icon": "label",
+                        "link": "admin:core_tag_changelist",
+                    },
+                    {
+                        "title": "Tag Logs",
+                        "icon": "history",
+                        "link": "admin:core_taglog_changelist",
+                    },
+                    {
+                        "title": "AI Analysis",
+                        "icon": "insights",
+                        "link": "admin:core_aianalysis_changelist",
+                    },
+                ],
+            },
+            {
+                "title": "Billing & Payments",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Bills",
+                        "icon": "receipt_long",
+                        "link": "admin:core_bill_changelist",
+                    },
+                    {
+                        "title": "Transactions",
+                        "icon": "payments",
+                        "link": "admin:core_paymenttransaction_changelist",
+                    },
+                ],
+            },
+            {
+                "title": "Support",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Complaints",
+                        "icon": "feedback",
+                        "link": "admin:core_complaint_changelist",
+                    },
+                ],
+            },
+        ],
+    },
 }

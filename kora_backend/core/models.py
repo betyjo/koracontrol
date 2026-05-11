@@ -95,3 +95,64 @@ class AIAnalysis(models.Model):
         return f"Analysis for {self.tag.name} - Anomaly: {self.is_anomaly}"
 
 
+class ChatThread(models.Model):
+    owner = models.ForeignKey('core.User', on_delete=models.CASCADE, related_name='chat_threads')
+    title = models.CharField(max_length=200, default='New chat')
+    is_deleted = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-updated_at']
+
+    def __str__(self):
+        return f"Thread {self.id} - {self.owner.username}"
+
+
+class ChatMessage(models.Model):
+    ROLE_CHOICES = [
+        ('user', 'User'),
+        ('ai', 'AI'),
+        ('system', 'System'),
+    ]
+
+    thread = models.ForeignKey(ChatThread, on_delete=models.CASCADE, related_name='messages')
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    content = models.TextField()
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Message {self.id} ({self.role})"
+
+
+def chat_attachment_upload_path(instance, filename):
+    return f"chat_attachments/user_{instance.thread.owner_id}/thread_{instance.thread_id}/{filename}"
+
+
+class ChatAttachment(models.Model):
+    thread = models.ForeignKey(ChatThread, on_delete=models.CASCADE, related_name='attachments')
+    message = models.ForeignKey(
+        ChatMessage,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='attachments',
+    )
+    file = models.FileField(upload_to=chat_attachment_upload_path)
+    original_name = models.CharField(max_length=255)
+    mime_type = models.CharField(max_length=120, blank=True)
+    size_bytes = models.PositiveIntegerField(default=0)
+    extracted_text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Attachment {self.id} - {self.original_name}"
+
+

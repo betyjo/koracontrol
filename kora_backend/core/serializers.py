@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Tag, TagLog, Bill, Complaint
+from .models import User, Tag, TagLog, Bill, Complaint, ChatThread, ChatMessage, ChatAttachment
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 # 1. JWT Customization: Add user role to the token so the UI knows who is logged in
@@ -80,3 +80,52 @@ class ResetPasswordSerializer(serializers.Serializer):
         if attrs['new_password'] != attrs['confirm_password']:
             raise serializers.ValidationError({"confirm_password": ["Passwords do not match."]})
         return attrs
+
+
+class ChatThreadSerializer(serializers.ModelSerializer):
+    last_message_preview = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChatThread
+        fields = ['id', 'title', 'created_at', 'updated_at', 'last_message_preview']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'last_message_preview']
+
+    def get_last_message_preview(self, obj):
+        last_message = obj.messages.order_by('-created_at').first()
+        if not last_message:
+            return ""
+        return last_message.content[:120]
+
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatMessage
+        fields = ['id', 'thread', 'role', 'content', 'metadata', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class ChatAttachmentSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ChatAttachment
+        fields = [
+            'id',
+            'thread',
+            'message',
+            'file',
+            'file_url',
+            'original_name',
+            'mime_type',
+            'size_bytes',
+            'extracted_text',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'file_url', 'size_bytes', 'extracted_text', 'created_at']
+
+    def get_file_url(self, obj):
+        request = self.context.get('request')
+        if not obj.file:
+            return None
+        url = obj.file.url
+        return request.build_absolute_uri(url) if request else url

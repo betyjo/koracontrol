@@ -1,0 +1,119 @@
+/* Unfold admin index: card-style modules */
+.dashboard .grow > .module {
+    border-radius: 16px !important;
+    border: 1px solid rgba(148, 163, 184, 0.2) !important;
+    box-shadow: 0 10px 25px rgba(2, 6, 23, 0.15) !important;
+    overflow: hidden !important;
+    background: #0f172a !important;
+}
+
+.dashboard .grow > .module > .bg-base-50 {
+    padding: 8px !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+}
+
+.dashboard .grow .module table {
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(148, 163, 184, 0.1) !important;
+    background: #1e293b !important;
+}
+
+.dashboard .grow .module caption {
+    margin-bottom: 8px !important;
+    padding: 6px 4px !important;
+}
+
+.dashboard .grow .module caption a.section {
+    display: inline-flex !important;
+    align-items: center !important;
+    padding: 4px 12px !important;
+    border-radius: 999px !important;
+    background: rgba(59, 130, 246, 0.15) !important;
+    border: 1px solid rgba(59, 130, 246, 0.4) !important;
+    font-size: 0.85rem !important;
+    color: #93c5fd !important;
+    font-weight: 600 !important;
+}
+
+.dashboard .grow .module tr[class*="model-"] {
+    transition: background-color 0.15s ease;
+}
+
+.dashboard .grow .module tr[class*="model-"]:hover {
+    background: rgba(59, 130, 246, 0.1) !important;
+}
+
+.dashboard .grow .module th,
+.dashboard .grow .module td {
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+}
+
+/* Right side recent actions card */
+.dashboard #content-related .module {
+    border-radius: 16px !important;
+    border: 1px solid rgba(148, 163, 184, 0.2) !important;
+    box-shadow: 0 10px 25px rgba(2, 6, 23, 0.15) !important;
+    overflow: hidden !important;
+    background: #0f172a !important;
+}
+
+.dashboard #content-related .module h2 {
+    background: rgba(148, 163, 184, 0.05) !important;
+    padding: 12px 16px !important;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1) !important;
+}
+
+.dashboard #content-related .module ul li {
+    margin: 0 !important;
+    padding: 14px 16px !important;
+    border-radius: 0 !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1) !important;
+    background: transparent !important;
+    transition: background-color 0.2s ease;
+}
+
+.dashboard #content-related .module ul li:hover {
+    background: rgba(59, 130, 246, 0.05) !important;
+}
+
+.dashboard #content-related .module ul li:last-child {
+    border-bottom: none !important;
+}
+
+/* Sidebar refinement */
+#nav-sidebar-apps li[class*="model-"] > a {
+    border-radius: 10px !important;
+    border: 1px solid transparent !important;
+    transition: all 0.2s ease !important;
+    margin: 2px 12px !important;
+    padding-top: 10px !important;
+    padding-bottom: 10px !important;
+}
+
+#nav-sidebar-apps li[class*="model-"] > a:hover {
+    background: rgba(59, 130, 246, 0.1) !important;
+    transform: translateX(4px) !important;
+    border-color: rgba(59, 130, 246, 0.2) !important;
+}
+
+#nav-sidebar-apps li.current-model > a,
+#nav-sidebar-apps li[class*="model-"] > a.active {
+    background: rgba(59, 130, 246, 0.15) !important;
+    border-color: rgba(59, 130, 246, 0.45) !important;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15) !important;
+    color: #60a5fa !important;
+}
+
+/* Force Material Symbols font correctly */
+.material-symbols-outlined, 
+[class*="material-symbols"] {
+    font-family: 'Material Symbols Outlined' !important;
+}
+
+

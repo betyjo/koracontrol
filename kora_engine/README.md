@@ -34,16 +34,28 @@ The engine is built on a modular architecture to ensure reliability and easy har
 
 ### Installation
 1. Ensure the backend is running.
-2. Update the `JWT_TOKEN` in `engine.py` with a valid access token.
-3. Run the engine:
+2. Create a local env file from the example:
+   ```bash
+   cp .env.example .env
+   ```
+3. Edit `.env` and set credentials for a backend account that can access `/api/tags/` and `/api/logs/`.
+4. Run the engine from the `kora_engine` directory:
    ```bash
    python engine.py
    ```
 
 ### Configuration
-Configure your connectivity in `engine.py`:
+Configure your connectivity and auth:
 - `API_URL`: Your backend logging endpoint.
-- `JWT_TOKEN`: Authorized token for secure data transmission.
+- `KORA_ENGINE_TOKEN`: Access token (optional, from environment variable).
+- `KORA_ENGINE_USERNAME`: Username for automatic login on startup/401.
+- `KORA_ENGINE_PASSWORD`: Password for automatic login on startup/401.
+
+### Authentication behavior
+- If `KORA_ENGINE_TOKEN` is set and valid, it is used directly.
+- If requests return `401`, the engine attempts login using `KORA_ENGINE_USERNAME` and `KORA_ENGINE_PASSWORD`, then retries once.
+- If neither token nor username/password is provided, logging requests are skipped with a clear error.
+- `.env` in `kora_engine` is auto-loaded on startup (via `python-dotenv`).
 
 ---
 

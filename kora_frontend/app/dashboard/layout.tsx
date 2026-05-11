@@ -1,6 +1,5 @@
 "use client";
 import React, { useEffect } from 'react';
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
     BarChart3,
@@ -20,6 +19,7 @@ import { useRouter } from 'next/navigation';
 import { useToast } from '@/context/ToastContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { hasValidToken } from '@/lib/auth';
+import { ConfirmationModal } from '@/components/ConfirmationModal';
 
 export default function DashboardLayout({
     children,
@@ -31,6 +31,7 @@ export default function DashboardLayout({
     const { showToast } = useToast();
     const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
     useEffect(() => {
         if (!hasValidToken()) {
@@ -43,6 +44,11 @@ export default function DashboardLayout({
     }, [router, showToast]);
 
     const handleLogout = () => {
+        setIsLogoutModalOpen(true);
+    };
+
+    const confirmLogout = () => {
+        setIsLogoutModalOpen(false);
         localStorage.removeItem('token');
         if (typeof window !== 'undefined') {
             sessionStorage.removeItem('authExpiredToastShown');
@@ -61,6 +67,12 @@ export default function DashboardLayout({
 
     const toggleDesktopSidebar = () => setIsDesktopSidebarOpen(!isDesktopSidebarOpen);
     const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
+    const handleNavigation = (href: string, closeMobileMenu = false) => {
+        if (closeMobileMenu) {
+            setIsMobileMenuOpen(false);
+        }
+        router.push(href);
+    };
 
     return (
         <div className="flex h-screen bg-slate-50 dark:bg-slate-950 overflow-hidden transition-colors duration-500">
@@ -97,9 +109,9 @@ export default function DashboardLayout({
                     {navItems.map((item) => {
                         const isActive = pathname === item.href;
                         return (
-                            <Link
+                            <button
                                 key={item.name}
-                                href={item.href}
+                                onClick={() => handleNavigation(item.href)}
                                 className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 cursor-pointer ${isDesktopSidebarOpen ? 'justify-start' : 'justify-center'} ${isActive
                                     ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 shadow-sm'
                                     : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-blue-600 dark:hover:text-blue-400'
@@ -107,7 +119,7 @@ export default function DashboardLayout({
                             >
                                 <item.icon size={20} />
                                 {isDesktopSidebarOpen && item.name}
-                            </Link>
+                            </button>
                         );
                     })}
                 </nav>
@@ -151,10 +163,9 @@ export default function DashboardLayout({
                     {navItems.map((item) => {
                         const isActive = pathname === item.href;
                         return (
-                                <Link
+                                <button
                                 key={item.name}
-                                href={item.href}
-                                onClick={toggleMobileMenu}
+                                onClick={() => handleNavigation(item.href, true)}
                                     className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors cursor-pointer ${isActive
                                     ? 'bg-blue-50 text-blue-600'
                                     : 'text-slate-600'
@@ -162,7 +173,7 @@ export default function DashboardLayout({
                             >
                                 <item.icon size={20} />
                                 {item.name}
-                            </Link>
+                            </button>
                         );
                     })}
                 </nav>
@@ -200,6 +211,17 @@ export default function DashboardLayout({
                     {children}
                 </main>
             </div>
+
+            <ConfirmationModal 
+                isOpen={isLogoutModalOpen}
+                onClose={() => setIsLogoutModalOpen(false)}
+                onConfirm={confirmLogout}
+                title="Sign Out"
+                message="Are you sure you want to log out of your account? You will need to sign back in to access your dashboard."
+                confirmText="Logout"
+                cancelText="Stay logged in"
+                variant="danger"
+            />
         </div>
     );
 }

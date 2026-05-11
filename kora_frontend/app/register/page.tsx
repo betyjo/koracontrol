@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { PageTransition } from '@/components/PageTransition';
 import { Loader2 } from 'lucide-react';
+import { useToast } from '@/context/ToastContext';
+
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -17,17 +19,20 @@ export default function RegisterPage() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { showToast } = useToast();
+
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
       await api.post('auth/register/', form);
-      alert("Account created! Please login.");
+      showToast("Account created successfully! Please login.", "success");
       router.push('/login');
     } catch {
-      alert("Registration failed. Try a different username.");
+      showToast("Registration failed. Please try a different username or check your details.", "error");
     } finally {
+
       setIsLoading(false);
     }
   };
