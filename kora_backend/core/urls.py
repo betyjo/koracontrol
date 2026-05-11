@@ -2,13 +2,13 @@ from django.urls import path
 from .views import (
     RegisterView, MyTokenObtainPairView, 
     TagListView, TagLogListCreateView,
-    BillListView, InitiatePaymentView, PaymentCallbackView,
+    BillListView, InitiatePaymentView, PaymentTransactionListView, PaymentCallbackView,
     ComplaintListCreateView, ComplaintDetailView,
-    AIAnalyzeView, AIChatView, AIThreadListCreateView, AIThreadDetailView,
+    AIAnalyzeView, AIAnalysisListView, AIChatView, AIThreadListCreateView, AIThreadDetailView,
     AIThreadMessageListView, AIThreadStreamView, AIThreadAttachmentUploadView, AIThreadExportView,
-    DashboardStatsView, UsageAnalyticsView, CostAnalyticsView, RecentActivityView,
+    DashboardStatsView, DashboardVizLiveView, UsageAnalyticsView, CostAnalyticsView, RecentActivityView,
     UserProfileView, ChangePasswordView, DeleteAccountView,
-    ForgotPasswordRequestView, ResetPasswordView
+    ForgotPasswordRequestView, ResetPasswordView, GoogleAuthView
 )
 from rest_framework_simplejwt.views import TokenRefreshView
 
@@ -19,6 +19,7 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('auth/forgot-password/', ForgotPasswordRequestView.as_view(), name='forgot_password'),
     path('auth/reset-password/', ResetPasswordView.as_view(), name='reset_password'),
+    path('auth/google/', GoogleAuthView.as_view(), name='auth_google'),
 
     # SCADA / Industrial Endpoints
     path('tags/', TagListView.as_view(), name='tag_list'),
@@ -27,6 +28,11 @@ urlpatterns = [
     # Billing & Payment Endpoints
     path('billing/', BillListView.as_view(), name='bill_list'),
     path('payments/initiate/<int:bill_id>/', InitiatePaymentView.as_view(), name='pay_initiate'),
+    path(
+        'payments/transactions/',
+        PaymentTransactionListView.as_view(),
+        name='payment_transaction_list',
+    ),
     path('payments/callback/<str:tx_ref>/', PaymentCallbackView.as_view(), name='pay_callback'),
 
     # Customer Support / Complaints
@@ -35,6 +41,7 @@ urlpatterns = [
 
     # AI & Analytics Endpoints
     path('ai/analyze/', AIAnalyzeView.as_view(), name='ai_analyze'),
+    path('ai/analyses/', AIAnalysisListView.as_view(), name='ai_analyses'),
     path('ai/chat/', AIChatView.as_view(), name='ai_chat'),
     path('ai/threads/', AIThreadListCreateView.as_view(), name='ai_thread_list_create'),
     path('ai/threads/<int:pk>/', AIThreadDetailView.as_view(), name='ai_thread_detail'),
@@ -45,6 +52,7 @@ urlpatterns = [
 
     # Dashboard Endpoints
     path('dashboard/stats/', DashboardStatsView.as_view(), name='dashboard_stats'),
+    path('dashboard/viz-live/', DashboardVizLiveView.as_view(), name='dashboard_viz_live'),
     path('dashboard/usage/', UsageAnalyticsView.as_view(), name='usage_analytics'),
     path('dashboard/cost/', CostAnalyticsView.as_view(), name='cost_analytics'),
     path('dashboard/activity/', RecentActivityView.as_view(), name='recent_activity'),

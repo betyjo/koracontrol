@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   AlertCircle, CheckCircle2, Clock, MessageSquarePlus,
   MessageSquare, Calendar, AlertTriangle, Filter, RefreshCw,
@@ -19,7 +20,10 @@ interface Complaint {
   updated_at: string;
 }
 
-export default function ComplaintsPage() {
+function ComplaintsInner() {
+  const searchParams = useSearchParams();
+  const complaintIdFocus = searchParams.get('complaintId');
+
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [form, setForm] = useState({ subject: '', description: '', priority: 'medium' });
   const [loading, setLoading] = useState(false);
@@ -46,6 +50,19 @@ export default function ComplaintsPage() {
   useEffect(() => {
     fetchComplaints();
   }, []);
+
+  useEffect(() => {
+    if (!complaintIdFocus || loading) return;
+    const timer = window.setTimeout(() => {
+      const el = document.getElementById(`complaint-card-${complaintIdFocus}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el?.classList.add('ring-2', 'ring-blue-500', 'ring-offset-2', 'rounded-xl');
+      window.setTimeout(() => {
+        el?.classList.remove('ring-2', 'ring-blue-500', 'ring-offset-2', 'rounded-xl');
+      }, 2600);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [complaintIdFocus, loading, complaints]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -274,7 +291,11 @@ export default function ComplaintsPage() {
                 filteredComplaints.map((ticket) => (
                   <div
                     key={ticket.id}
-                    className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-300"
+                    id={`complaint-card-${ticket.id}`}
+                    className={`bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all duration-300 ${complaintIdFocus === String(ticket.id)
+                      ? 'bg-blue-50/50 dark:bg-blue-950/25'
+                      : ''
+                      }`}
                   >
                     <div className="flex justify-between items-start mb-3">
                       <h3 className="font-semibold text-slate-800 dark:text-white text-lg transition-colors">{ticket.subject}</h3>
@@ -319,6 +340,18 @@ export default function ComplaintsPage() {
         </div>
       </div>
     </PageTransition>
+  );
+}
+
+export default function ComplaintsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-64 p-6">
+        <RefreshCw size={28} className="animate-spin text-blue-600" />
+      </div>
+    }>
+      <ComplaintsInner />
+    </Suspense>
   );
 }
 

@@ -4,6 +4,7 @@ import api from '@/lib/api';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Activity, CreditCard, MessageSquare, Loader2, Zap, Waves, ShieldCheck } from 'lucide-react';
 import { PageTransition } from '@/components/PageTransition';
+import DashboardScadaSection from '@/components/dashboard-viz/DashboardScadaSection';
 
 interface ChartPoint {
     time: string;
@@ -92,6 +93,8 @@ export default function Dashboard() {
                         </div>
                     </div>
                 </header>
+
+                <DashboardScadaSection />
 
                 {loading ? (
                     <div className="flex items-center justify-center h-32 mb-8">

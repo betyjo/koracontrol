@@ -1,9 +1,19 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { Receipt, CreditCard, CheckCircle, AlertCircle, Loader2, Calendar, Zap } from 'lucide-react';
-import api from '@/lib/api';
-import { PageTransition } from '@/components/PageTransition';
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import {
+  Receipt,
+  CreditCard,
+  CheckCircle,
+  AlertCircle,
+  Loader2,
+  Calendar,
+  Zap,
+  ArrowLeftRight,
+} from "lucide-react";
+import api from "@/lib/api";
+import { PageTransition } from "@/components/PageTransition";
 
 interface Bill {
   id: number;
@@ -13,52 +23,87 @@ interface Bill {
   billing_date: string;
 }
 
-export default function BillingPage() {
+interface PaymentTransaction {
+  id: number;
+  tx_ref: string;
+  bill_id: number;
+  amount: string;
+  status: string;
+  created_at: string;
+}
+
+function BillingInner() {
+  const searchParams = useSearchParams();
+  const billIdFocus = searchParams.get("billId");
+  const txRefFocus = searchParams.get("txRef");
+
   const [bills, setBills] = useState<Bill[]>([]);
+  const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payingBillId, setPayingBillId] = useState<number | null>(null);
 
-  useEffect(() => {
-    fetchBills();
-  }, []);
-
-  const fetchBills = async () => {
+  const fetchAll = async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get('billing/');
-      setBills(res.data);
+      const [billsRes, txsRes] = await Promise.all([
+        api.get<Bill[]>("billing/"),
+        api.get<PaymentTransaction[]>("payments/transactions/"),
+      ]);
+      setBills(billsRes.data);
+      setTransactions(txsRes.data);
     } catch (err) {
-      console.error('Failed to fetch bills:', err);
-      setError('Failed to load bills. Please try again later.');
+      console.error("Billing data fetch failed:", err);
+      setError("Failed to load billing data. Please try again later.");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchAll();
+  }, []);
+
+  useEffect(() => {
+    if (loading || error) return;
+    const timer = window.setTimeout(() => {
+      let el: HTMLElement | null = null;
+      if (txRefFocus) {
+        const txn = transactions.find((t) => t.tx_ref === txRefFocus);
+        if (txn) el = document.getElementById(`tx-row-${txn.id}`);
+      }
+      if (!el && billIdFocus) el = document.getElementById(`bill-row-${billIdFocus}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      el?.classList.add("ring-2", "ring-blue-500", "ring-offset-2");
+      window.setTimeout(() => {
+        el?.classList.remove("ring-2", "ring-blue-500", "ring-offset-2");
+      }, 2600);
+    }, 180);
+    return () => window.clearTimeout(timer);
+  }, [billIdFocus, txRefFocus, bills, transactions, loading, error]);
 
   const handlePay = async (billId: number) => {
     try {
       setPayingBillId(billId);
       const res = await api.post(`payments/initiate/${billId}/`);
       if (res.data.checkout_url) {
-        window.location.href = res.data.checkout_url; // Redirect to Chapa
+        window.location.href = res.data.checkout_url;
       } else {
-        setError('Failed to initiate payment. Please try again.');
+        setError("Failed to initiate payment. Please try again.");
       }
     } catch (err) {
-      console.error('Payment initiation failed:', err);
-      setError('Failed to initiate payment. Please try again.');
+      console.error("Payment initiation failed:", err);
+      setError("Failed to initiate payment. Please try again.");
     } finally {
       setPayingBillId(null);
     }
   };
 
-  // Calculate summary stats
   const totalBills = bills.length;
-  const paidBills = bills.filter(b => b.is_paid).length;
+  const paidBills = bills.filter((b) => b.is_paid).length;
   const totalUnpaidAmount = bills
-    .filter(b => !b.is_paid)
+    .filter((b) => !b.is_paid)
     .reduce((sum, b) => sum + parseFloat(b.amount), 0);
   const totalUsage = bills.reduce((sum, b) => sum + b.usage_kwh, 0);
 
@@ -75,12 +120,14 @@ export default function BillingPage() {
   if (error) {
     return (
       <div className="p-6 max-w-7xl mx-auto">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center transition-colors">
           <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
-          <h3 className="text-lg font-semibold text-red-800 mb-2">Error Loading Bills</h3>
-          <p className="text-red-600 mb-4">{error}</p>
+          <h3 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">
+            Could not load billing
+          </h3>
+          <p className="text-red-600 dark:text-red-300 mb-4">{error}</p>
           <button
-            onClick={fetchBills}
+            onClick={() => fetchAll()}
             className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors cursor-pointer"
           >
             Retry
@@ -93,13 +140,15 @@ export default function BillingPage() {
   return (
     <PageTransition>
       <div className="p-6 max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white transition-colors">Billing & Payments</h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-1 transition-colors">View your bill history and make payments</p>
+          <h1 className="text-3xl font-bold text-slate-900 dark:text-white transition-colors">
+            Billing & Payments
+          </h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-1 transition-colors">
+            Bill history and Chapa checkout activity — aligns with Django admin Bills & Transactions.
+          </p>
         </div>
 
-        {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <SummaryCard
             title="Total Bills"
@@ -127,17 +176,20 @@ export default function BillingPage() {
           />
         </div>
 
-        {/* Bills Table */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border dark:border-slate-800 overflow-hidden transition-colors duration-500">
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border dark:border-slate-800 overflow-hidden transition-colors duration-500 mb-8">
           <div className="p-6 border-b dark:border-slate-800">
-            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Your Bill History</h2>
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Your bills</h2>
           </div>
 
           {bills.length === 0 ? (
             <div className="p-12 text-center transition-colors">
               <Receipt className="mx-auto h-16 w-16 text-slate-300 dark:text-slate-700 mb-4" />
-              <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">No Bills Found</h3>
-              <p className="text-slate-500 dark:text-slate-400">You don&apos;t have any bills yet.</p>
+              <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
+                No bills yet
+              </h3>
+              <p className="text-slate-500 dark:text-slate-400">
+                Bills created in admin will appear here for the logged-in customer.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -154,18 +206,28 @@ export default function BillingPage() {
                 </thead>
                 <tbody>
                   {bills.map((bill) => (
-                    <tr key={bill.id} className="border-b dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <tr
+                      key={bill.id}
+                      id={`bill-row-${bill.id}`}
+                      className={`border-b dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
+                        billIdFocus === String(bill.id) && !txRefFocus
+                          ? "bg-blue-50/70 dark:bg-blue-950/30"
+                          : ""
+                      }`}
+                    >
                       <td className="p-4">
-                        <span className="font-medium text-slate-900 dark:text-white">#{bill.id}</span>
+                        <span className="font-medium text-slate-900 dark:text-white">
+                          #{bill.id}
+                        </span>
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-2">
                           <Calendar size={16} className="text-slate-400 dark:text-slate-500" />
                           <span className="text-slate-700 dark:text-slate-300">
-                            {new Date(bill.billing_date).toLocaleDateString('en-US', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric'
+                            {new Date(bill.billing_date).toLocaleDateString("en-US", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
                             })}
                           </span>
                         </div>
@@ -173,7 +235,9 @@ export default function BillingPage() {
                       <td className="p-4">
                         <div className="flex items-center gap-2 transition-colors">
                           <Zap size={16} className="text-slate-400 dark:text-slate-500" />
-                          <span className="text-slate-700 dark:text-slate-300">{bill.usage_kwh} kWh</span>
+                          <span className="text-slate-700 dark:text-slate-300">
+                            {bill.usage_kwh} kWh
+                          </span>
                         </div>
                       </td>
                       <td className="p-4">
@@ -182,10 +246,13 @@ export default function BillingPage() {
                         </span>
                       </td>
                       <td className="p-4">
-                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${bill.is_paid
-                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                          : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                          }`}>
+                        <span
+                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                            bill.is_paid
+                              ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                              : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                          }`}
+                        >
                           {bill.is_paid ? (
                             <>
                               <CheckCircle size={12} />
@@ -214,12 +281,12 @@ export default function BillingPage() {
                             ) : (
                               <>
                                 <CreditCard size={16} />
-                                Pay Now
+                                Pay now
                               </>
                             )}
                           </button>
                         ) : (
-                          <span className="text-slate-400 text-sm">-</span>
+                          <span className="text-slate-400 text-sm">—</span>
                         )}
                       </td>
                     </tr>
@@ -230,18 +297,75 @@ export default function BillingPage() {
           )}
         </div>
 
-        {/* Payment Info */}
-        <div className="mt-8 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6 transition-colors duration-500">
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border dark:border-slate-800 overflow-hidden transition-colors duration-500 mb-8">
+          <div className="p-6 border-b dark:border-slate-800 flex items-center gap-2">
+            <ArrowLeftRight className="text-slate-500 dark:text-slate-400" size={22} />
+            <div>
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+                Payment transactions
+              </h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                Checkout attempts and callback status (mirrors Payment transactions in admin).
+              </p>
+            </div>
+          </div>
+          {transactions.length === 0 ? (
+            <div className="p-10 text-center text-slate-500 dark:text-slate-400 text-sm">
+              No payment attempts yet — start checkout from an unpaid bill.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 dark:bg-slate-800/50 border-b dark:border-slate-800 transition-colors">
+                  <tr>
+                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Reference</th>
+                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Bill</th>
+                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Amount</th>
+                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Status</th>
+                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((t) => (
+                    <tr
+                      key={t.id}
+                      id={`tx-row-${t.id}`}
+                      className={`border-b dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
+                        txRefFocus === t.tx_ref ? "bg-blue-50/70 dark:bg-blue-950/30" : ""
+                      }`}
+                    >
+                      <td className="p-4 font-mono text-xs text-slate-800 dark:text-slate-200 break-all max-w-[12rem]">
+                        {t.tx_ref}
+                      </td>
+                      <td className="p-4 text-slate-700 dark:text-slate-300">#{t.bill_id}</td>
+                      <td className="p-4 font-medium text-slate-900 dark:text-white">
+                        ETB {parseFloat(t.amount).toLocaleString()}
+                      </td>
+                      <td className="p-4 capitalize text-slate-700 dark:text-slate-300">
+                        {t.status}
+                      </td>
+                      <td className="p-4 text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        {new Date(t.created_at).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6 transition-colors duration-500">
           <div className="flex items-start gap-4">
             <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
               <CreditCard className="text-blue-600 dark:text-blue-400" size={24} />
             </div>
             <div>
-              <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">Secure Payments with Chapa</h3>
+              <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
+                Secure payments with Chapa
+              </h3>
               <p className="text-blue-700 dark:text-blue-300 text-sm">
-                All payments are processed securely through Chapa. You&apos;ll be redirected to Chapa&apos;s
-                secure checkout page to complete your payment. We accept various payment methods
-                including bank transfers, cards, and mobile money.
+                You&apos;ll complete payment on Chapa&apos;s hosted checkout when you tap Pay now.
               </p>
             </div>
           </div>
@@ -261,11 +385,23 @@ interface SummaryCardProps {
 function SummaryCard({ title, value, icon, bgColor }: SummaryCardProps) {
   return (
     <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border dark:border-slate-800 hover:shadow-md transition-all duration-300">
-      <div className={`p-3 ${bgColor} rounded-lg w-fit mb-4 transition-colors`}>
-        {icon}
-      </div>
+      <div className={`p-3 ${bgColor} rounded-lg w-fit mb-4 transition-colors`}>{icon}</div>
       <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 transition-colors">{title}</p>
       <p className="text-2xl font-bold text-slate-900 dark:text-white transition-colors">{value}</p>
     </div>
+  );
+}
+
+export default function BillingPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-6 max-w-7xl mx-auto flex justify-center py-24">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+        </div>
+      }
+    >
+      <BillingInner />
+    </Suspense>
   );
 }

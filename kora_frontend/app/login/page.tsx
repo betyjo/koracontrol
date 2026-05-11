@@ -8,6 +8,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { PageTransition } from '@/components/PageTransition';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { hasValidToken } from '@/lib/auth';
+import { useGoogleLogin } from '@react-oauth/google';
 
 export default function LoginPage() {
     const [form, setForm] = useState({ username: '', password: '' });
@@ -22,8 +23,38 @@ export default function LoginPage() {
                 sessionStorage.removeItem('authExpiredToastShown');
             }
             router.push('/dashboard');
+            return;
+        }
+
+        if (typeof window !== 'undefined') {
+            const urlParams = new URLSearchParams(window.location.search);
+            const code = urlParams.get('code');
+            const error = urlParams.get('error');
+
+            if (code) {
+                // Clear URL params without refreshing
+                window.history.replaceState({}, document.title, window.location.pathname);
+                handleGoogleCode(code);
+            } else if (error) {
+                window.history.replaceState({}, document.title, window.location.pathname);
+                showToast("Google authentication was cancelled or failed.", "error");
+            }
         }
     }, [router]);
+
+    const handleGoogleCode = async (code: string) => {
+        setIsLoading(true);
+        try {
+            const res = await api.post('auth/google/', { code });
+            localStorage.setItem('token', res.data.access);
+            showToast("Logged in with Google successfully!", "success");
+            router.push('/dashboard');
+        } catch (err: any) {
+            const errorMsg = err.response?.data?.error || "Google authentication failed";
+            showToast(errorMsg, "error");
+            setIsLoading(false);
+        }
+    };
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -40,8 +71,18 @@ export default function LoginPage() {
         }
     };
 
+    const googleLogin = useGoogleLogin({
+        flow: 'auth-code',
+        ux_mode: 'redirect',
+        redirect_uri: 'http://localhost:3000/login',
+    });
+
     const handleSocialLogin = (provider: string) => {
-        showToast(`${provider} login is not yet configured.`, "info");
+        if (provider === 'Google') {
+            googleLogin();
+        } else {
+            showToast(`${provider} login is not yet configured.`, "info");
+        }
     };
 
     const GoogleIcon = () => (

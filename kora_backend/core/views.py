@@ -1,7 +1,10 @@
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
-from .models import User, Tag, TagLog
+from collections import defaultdict
+
+from .dashboard_viz import gauge_needle_degrees, normalized_ratio, status_level_for_value
+from .models import User, Tag, TagLog, DashboardVisualization
 from .serializers import (
     RegisterSerializer, MyTokenObtainPairSerializer, 
     TagSerializer, TagLogSerializer, UserSerializer, ChangePasswordSerializer,
@@ -96,6 +99,81 @@ class ResetPasswordView(generics.GenericAPIView):
         user.save()
         return Response({"message": "Password reset successful. You can now log in."}, status=status.HTTP_200_OK)
 
+import requests
+from django.conf import settings
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.views import APIView
+
+class GoogleAuthView(APIView):
+    permission_classes = (permissions.AllowAny,)
+    
+    def post(self, request):
+        code = request.data.get("code")
+        if not code:
+            return Response({"error": "No code provided"}, status=400)
+
+        # 1. Exchange code for tokens
+        token_res = requests.post("https://oauth2.googleapis.com/token", data={
+            "code": code,
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "client_secret": settings.GOOGLE_CLIENT_SECRET,
+            "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        })
+        token_data = token_res.json()
+
+        if "error" in token_data:
+            return Response({"error": token_data.get("error_description", token_data["error"])}, status=400)
+
+        # 2. Get user info from Google
+        user_info = requests.get("https://www.googleapis.com/oauth2/v2/userinfo", headers={
+            "Authorization": f"Bearer {token_data['access_token']}"
+        }).json()
+
+        email = user_info.get("email")
+        name = user_info.get("name", "")
+        
+        if not email:
+            return Response({"error": "Google authentication failed. No email provided."}, status=400)
+
+        # 3. Get or create user
+        # Standard web app behavior: derive username from email prefix
+        base_username = email.split('@')[0]
+        
+        try:
+            # If user exists with this email, standard behavior is to link it
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Create new user with unique username
+            username = base_username
+            counter = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+                
+            user = User.objects.create(
+                email=email,
+                username=username,
+                first_name=name.split()[0] if name else "",
+                last_name=name.split()[-1] if len(name.split()) > 1 else ""
+            )
+
+        # 4. Return JWT tokens
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "username": user.username,
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "role": user.role if hasattr(user, 'role') else 'user'
+            }
+        })
+
+
 # --- INDUSTRIAL API VIEWS ---
 
 class TagListView(generics.ListCreateAPIView):
@@ -120,9 +198,22 @@ class TagLogListCreateView(generics.ListCreateAPIView):
         return super().create(request, *args, **kwargs)
 
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
+
+from django.conf import settings as django_conf
 from .models import Bill, PaymentTransaction, Complaint
-from .chapa_service import initialize_chapa_payment
-from .serializers import BillSerializer, ComplaintSerializer, ComplaintUpdateSerializer
+from .chapa_service import (
+    initialize_chapa_payment,
+    ChapaConfigurationError,
+    ChapaRequestError,
+)
+from .serializers import (
+    BillSerializer,
+    ComplaintSerializer,
+    ComplaintUpdateSerializer,
+    PaymentTransactionSerializer,
+    AIAnalysisSerializer,
+)
 from .serializers import ChatThreadSerializer, ChatMessageSerializer, ChatAttachmentSerializer
 from django.db import transaction
 
@@ -139,45 +230,87 @@ class BillListView(generics.ListAPIView):
 class InitiatePaymentView(generics.GenericAPIView):
     def post(self, request, bill_id):
         bill = get_object_or_404(Bill, id=bill_id, user=request.user)
-        
-        # 1. Create a transaction record
-        transaction = PaymentTransaction.objects.create(
+
+        payment_tx = PaymentTransaction.objects.create(
             user=request.user,
             bill=bill,
-            amount=bill.amount
+            amount=bill.amount,
         )
 
-        # 2. Call Chapa
-        chapa_res = initialize_chapa_payment(transaction)
+        frontend = getattr(django_conf, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+        return_url = f"{frontend}/dashboard/billing"
+        callback_url = request.build_absolute_uri(
+            reverse("pay_callback", kwargs={"tx_ref": str(payment_tx.tx_ref)})
+        )
 
-        if chapa_res.get('status') == 'success':
-            return Response({
-                "checkout_url": chapa_res['data']['checkout_url'],
-                "tx_ref": transaction.tx_ref
-            })
-        else:
-            return Response({"error": "Chapa initialization failed"}, status=400)
+        try:
+            body = initialize_chapa_payment(
+                payment_tx,
+                callback_url=callback_url,
+                return_url=return_url,
+            )
+        except ChapaConfigurationError as exc:
+            return Response({"error": str(exc)}, status=503)
+        except ChapaRequestError as exc:
+            return Response({"error": str(exc)}, status=502)
+
+        checkout_url = (body.get("data") or {}).get("checkout_url")
+        if not checkout_url:
+            return Response(
+                {"error": "Chapa response missing checkout URL."},
+                status=502,
+            )
+        return Response({"checkout_url": checkout_url, "tx_ref": payment_tx.tx_ref})
 
 class PaymentCallbackView(generics.GenericAPIView):
     permission_classes = [permissions.AllowAny] # Chapa calls this, no JWT needed
 
     def get(self, request, tx_ref):
         """
-        Chapa calls this after payment. In a real app, use a POST webhook.
-        For simplicity, we use the return GET verification.
+        Secure verification by calling Chapa's Verify API.
         """
+        import requests
+        
         transaction = get_object_or_404(PaymentTransaction, tx_ref=tx_ref)
         
-        # Here you would normally call Chapa Verify API to confirm success
-        # For our MVP:
-        transaction.status = 'success'
-        transaction.save()
-        
-        # Mark the bill as paid
-        transaction.bill.is_paid = True
-        transaction.bill.save()
+        # Don't verify twice if already successful
+        if transaction.status == 'success':
+            return Response({"message": "Payment already verified"})
 
-        return Response({"message": "Payment verified and bill updated"})
+        secret = getattr(django_conf, "CHAPA_SECRET_KEY", "").strip()
+        if not secret:
+            # Fallback for local mock testing if no key is present
+            transaction.status = 'success'
+            transaction.save()
+            transaction.bill.is_paid = True
+            transaction.bill.save()
+            return Response({"message": "Mock payment verified"})
+
+        headers = {
+            "Authorization": f"Bearer {secret}",
+        }
+        
+        verify_url = f"https://api.chapa.co/v1/transaction/verify/{tx_ref}"
+        
+        try:
+            response = requests.get(verify_url, headers=headers, timeout=10)
+            data = response.json()
+            
+            if response.status_code == 200 and data.get('status') == 'success':
+                # Payment was actually successful!
+                transaction.status = 'success'
+                transaction.save()
+                
+                transaction.bill.is_paid = True
+                transaction.bill.save()
+                return Response({"message": "Payment verified securely and bill updated"})
+            else:
+                transaction.status = 'failed'
+                transaction.save()
+                return Response({"error": "Payment verification failed"}, status=400)
+                
+        except Exception as e:
+            return Response({"error": "Failed to reach Chapa verification API"}, status=502)
 
 class ComplaintListCreateView(generics.ListCreateAPIView):
     serializer_class = ComplaintSerializer
@@ -237,6 +370,23 @@ class AIAnalyzeView(generics.GenericAPIView):
             "explanation": explanation,
             "status": "Warning" if is_anomaly else "Healthy"
         })
+
+
+class PaymentTransactionListView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = PaymentTransactionSerializer
+
+    def get_queryset(self):
+        return PaymentTransaction.objects.filter(user=self.request.user).select_related(
+            "bill"
+        ).order_by("-created_at")
+
+
+class AIAnalysisListView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AIAnalysisSerializer
+    queryset = AIAnalysis.objects.select_related("tag").order_by("-detected_at")
+
 
 class AIChatView(generics.GenericAPIView):
     def post(self, request):
@@ -449,6 +599,89 @@ class AIThreadExportView(generics.GenericAPIView):
         return response
 
 # --- DASHBOARD ANALYTICS VIEWS ---
+
+
+class DashboardVizLiveView(generics.GenericAPIView):
+    """
+    Admin-controlled SCADA visuals: latest values, derived status levels,
+    normalized fill for tanks/gauges, and rolling 60s series for trends.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        panels_cfg = (
+            DashboardVisualization.objects.filter(is_active=True)
+            .select_related('tag')
+            .order_by('sort_order', 'id')
+        )
+        now = timezone.now()
+
+        panels = list(panels_cfg)
+        if not panels:
+            return Response({'panels': [], 'refreshed_at': now.isoformat()})
+
+        tag_ids = list({p.tag_id for p in panels})
+        cutoff = now - timedelta(seconds=60)
+
+        latest_map = {}
+        for tid in tag_ids:
+            row = TagLog.objects.filter(tag_id=tid).only('value', 'timestamp').first()
+            if row:
+                latest_map[tid] = row
+
+        trend_tag_ids = {p.tag_id for p in panels if p.widget_type == 'trend'}
+        trend_buckets = defaultdict(list)
+        if trend_tag_ids:
+            recent = (
+                TagLog.objects.filter(
+                    tag_id__in=list(trend_tag_ids),
+                    timestamp__gte=cutoff,
+                )
+                .order_by('timestamp')
+                .values_list('tag_id', 'timestamp', 'value')
+            )
+            for tid, ts, val in recent:
+                trend_buckets[int(tid)].append((ts.isoformat(), float(val)))
+
+        out = []
+        for panel in panels:
+            latest = latest_map.get(panel.tag_id)
+            val = latest.value if latest else None
+
+            ratio = normalized_ratio(val, panel.scale_min, panel.scale_max)
+            st_level = status_level_for_value(
+                val,
+                panel.alarm_high,
+                panel.alarm_low,
+                panel.warning_high,
+                panel.warning_low,
+            )
+            needle = gauge_needle_degrees(ratio) if ratio is not None else None
+
+            series_pts = [{'t': tp[0], 'value': tp[1]} for tp in trend_buckets.get(panel.tag_id, [])]
+            series_pts = series_pts[-720:]
+
+            out.append(
+                {
+                    'id': panel.id,
+                    'widget_type': panel.widget_type,
+                    'title': (panel.title or '').strip() or panel.tag.name,
+                    'tag_id': panel.tag_id,
+                    'tag_name': panel.tag.name,
+                    'unit': panel.tag.unit or '',
+                    'scale_min': panel.scale_min,
+                    'scale_max': panel.scale_max,
+                    'value': round(float(val), 4) if val is not None else None,
+                    'timestamp': latest.timestamp.isoformat() if latest else None,
+                    'fill_ratio': round(float(ratio), 4) if ratio is not None else None,
+                    'needle_degrees': round(float(needle), 2) if needle is not None else None,
+                    'status_level': st_level,
+                    'series': series_pts if panel.widget_type == 'trend' else [],
+                }
+            )
+
+        return Response({'panels': out, 'refreshed_at': now.isoformat()})
+
 
 class DashboardStatsView(generics.GenericAPIView):
     """

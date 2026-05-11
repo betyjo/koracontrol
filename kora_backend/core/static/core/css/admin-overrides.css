@@ -1,5 +1,5 @@
 /* Unfold admin index: card-style modules */
-.dashboard .grow > .module {
+.dashboard .grow>.module {
     border-radius: 16px !important;
     border: 1px solid rgba(148, 163, 184, 0.2) !important;
     box-shadow: 0 10px 25px rgba(2, 6, 23, 0.15) !important;
@@ -7,7 +7,7 @@
     background: #0f172a !important;
 }
 
-.dashboard .grow > .module > .bg-base-50 {
+.dashboard .grow>.module>.bg-base-50 {
     padding: 8px !important;
     border: none !important;
     box-shadow: none !important;
@@ -87,7 +87,7 @@
 }
 
 /* Sidebar refinement */
-#nav-sidebar-apps li[class*="model-"] > a {
+#nav-sidebar-apps li[class*="model-"]>a {
     border-radius: 10px !important;
     border: 1px solid transparent !important;
     transition: all 0.2s ease !important;
@@ -96,14 +96,14 @@
     padding-bottom: 10px !important;
 }
 
-#nav-sidebar-apps li[class*="model-"] > a:hover {
+#nav-sidebar-apps li[class*="model-"]>a:hover {
     background: rgba(59, 130, 246, 0.1) !important;
     transform: translateX(4px) !important;
     border-color: rgba(59, 130, 246, 0.2) !important;
 }
 
-#nav-sidebar-apps li.current-model > a,
-#nav-sidebar-apps li[class*="model-"] > a.active {
+#nav-sidebar-apps li.current-model>a,
+#nav-sidebar-apps li[class*="model-"]>a.active {
     background: rgba(59, 130, 246, 0.15) !important;
     border-color: rgba(59, 130, 246, 0.45) !important;
     box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15) !important;
@@ -111,9 +111,7 @@
 }
 
 /* Force Material Symbols font correctly */
-.material-symbols-outlined, 
+.material-symbols-outlined,
 [class*="material-symbols"] {
     font-family: 'Material Symbols Outlined' !important;
 }
-
-

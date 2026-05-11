@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import {
     BarChart3,
+    Sparkles,
     Receipt,
     MessageSquare,
     Bot,
@@ -62,6 +63,7 @@ export default function DashboardLayout({
         { name: 'Billing', href: '/dashboard/billing', icon: Receipt },
         { name: 'Complaints', href: '/dashboard/complaints', icon: MessageSquare },
         { name: 'AI Assistant', href: '/dashboard/ai-chat', icon: Bot },
+        { name: 'AI Analytics', href: '/dashboard/analytics', icon: Sparkles },
         { name: 'Settings', href: '/dashboard/settings', icon: Settings },
     ];
 

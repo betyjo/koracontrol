@@ -1,5 +1,16 @@
 from rest_framework import serializers
-from .models import User, Tag, TagLog, Bill, Complaint, ChatThread, ChatMessage, ChatAttachment
+from .models import (
+    User,
+    Tag,
+    TagLog,
+    Bill,
+    Complaint,
+    ChatThread,
+    ChatMessage,
+    ChatAttachment,
+    PaymentTransaction,
+    AIAnalysis,
+)
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 # 1. JWT Customization: Add user role to the token so the UI knows who is logged in
@@ -129,3 +140,25 @@ class ChatAttachmentSerializer(serializers.ModelSerializer):
             return None
         url = obj.file.url
         return request.build_absolute_uri(url) if request else url
+
+
+class PaymentTransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PaymentTransaction
+        fields = ["id", "tx_ref", "bill_id", "amount", "status", "created_at"]
+
+
+class AIAnalysisSerializer(serializers.ModelSerializer):
+    tag_name = serializers.CharField(source="tag.name", read_only=True)
+
+    class Meta:
+        model = AIAnalysis
+        fields = [
+            "id",
+            "tag",
+            "tag_name",
+            "is_anomaly",
+            "confidence_score",
+            "explanation",
+            "detected_at",
+        ]

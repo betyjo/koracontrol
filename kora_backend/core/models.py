@@ -36,6 +36,42 @@ class TagLog(models.Model):
     class Meta:
         ordering = ['-timestamp'] # Latest data first
 
+
+class DashboardVisualization(models.Model):
+    """
+    Admin-controlled SCADA widgets on the Next.js Monitoring dashboard.
+    Each row maps a Tag to one visual representation.
+    """
+
+    WIDGET_TYPES = (
+        ('tank', 'Animated tank'),
+        ('gauge', 'Circular gauge'),
+        ('status', 'Neon status'),
+        ('trend', '60s trend chart'),
+    )
+
+    tag = models.ForeignKey(Tag, on_delete=models.CASCADE, related_name='dashboard_widgets')
+    widget_type = models.CharField(max_length=16, choices=WIDGET_TYPES)
+    title = models.CharField(max_length=120, blank=True, help_text='Leave blank to use tag name.')
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    scale_min = models.FloatField(default=0)
+    scale_max = models.FloatField(default=100, help_text='Used for gauge/tank filling and thresholds context.')
+
+    warning_high = models.FloatField(null=True, blank=True)
+    alarm_high = models.FloatField(null=True, blank=True)
+    warning_low = models.FloatField(null=True, blank=True)
+    alarm_low = models.FloatField(null=True, blank=True)
+
+    class Meta:
+        ordering = ('sort_order', 'id')
+
+    def __str__(self):
+        label = self.title or self.tag.name
+        return f'{label} ({self.get_widget_type_display()})'
+
+
 import uuid
 
 class Bill(models.Model):

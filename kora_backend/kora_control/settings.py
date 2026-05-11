@@ -186,6 +186,19 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Custom User Model
 AUTH_USER_MODEL = 'core.User'
 
+# Next.js app (admin "View on site" / sidebar portal links)
+FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+
+# Google OAuth
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip()
+GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "postmessage").strip()
+
+# Chapa (optional in DEBUG without key — billing uses mock redirect; set for production)
+CHAPA_SECRET_KEY = os.environ.get("CHAPA_SECRET_KEY", "").strip()
+CHAPA_CURRENCY = os.environ.get("CHAPA_CURRENCY", "ETB")
+CHAPA_TIMEOUT_SECONDS = int(os.environ.get("CHAPA_TIMEOUT_SECONDS", "20"))
+
 # CORS Configuration
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -236,6 +249,7 @@ UNFOLD = {
     "SITE_URL": "/",
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": True,
+    "SITE_DROPDOWN": [],
     "STYLES": [
         "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200",
         f"/{STATIC_URL.strip('/')}/core/css/admin-overrides.css",
@@ -259,6 +273,7 @@ UNFOLD = {
         "show_search": True,
         "show_all_applications": True,
         "navigation": [
+
             {
                 "title": "Authentication",
                 "separator": True,
@@ -278,6 +293,11 @@ UNFOLD = {
                         "title": "Tags",
                         "icon": "label",
                         "link": "admin:core_tag_changelist",
+                    },
+                    {
+                        "title": "Dashboard visuals",
+                        "icon": "widgets",
+                        "link": "admin:core_dashboardvisualization_changelist",
                     },
                     {
                         "title": "Tag Logs",

@@ -19,6 +19,8 @@ export const metadata: Metadata = {
   description: "Next Generation Industrial Control System",
 };
 
+import GoogleAuthProviderWrapper from "@/components/GoogleAuthProviderWrapper";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -36,7 +38,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ToastProvider>
-            {children}
+            <GoogleAuthProviderWrapper>
+              {children}
+            </GoogleAuthProviderWrapper>
           </ToastProvider>
         </ThemeProvider>
       </body>
