@@ -4,11 +4,16 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from collections import defaultdict
 
 from .dashboard_viz import gauge_needle_degrees, normalized_ratio, status_level_for_value
-from .models import User, Tag, TagLog, DashboardVisualization
+from .alarm_evaluator import evaluate_alarm_for_log
+from .models import User, Tag, TagLog, DashboardVisualization, AlarmRule, AlarmEvent, TrendAnnotation, OperatorJournalEntry, InAppNotification, NotificationSubscription, PlantArea, PlantEquipment, Bill, PaymentTransaction, Complaint, AIAnalysis, ChatThread, ChatMessage, ChatAttachment
 from .serializers import (
-    RegisterSerializer, MyTokenObtainPairSerializer, 
+    RegisterSerializer,
+    MyTokenObtainPairSerializer,
     TagSerializer, TagLogSerializer, UserSerializer, ChangePasswordSerializer,
-    ForgotPasswordRequestSerializer, ResetPasswordSerializer
+    ForgotPasswordRequestSerializer, ResetPasswordSerializer,
+    AlarmRuleSerializer, AlarmEventSerializer, AlarmAcknowledgeSerializer, AlarmShelveSerializer,
+    TrendAnnotationSerializer, OperatorJournalEntrySerializer,
+    InAppNotificationSerializer, NotificationSubscriptionSerializer, PlantEquipmentSerializer
 )
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
@@ -101,7 +106,6 @@ class ResetPasswordView(generics.GenericAPIView):
 
 import requests
 from django.conf import settings
-from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
 
 class GoogleAuthView(APIView):
@@ -158,8 +162,8 @@ class GoogleAuthView(APIView):
                 last_name=name.split()[-1] if len(name.split()) > 1 else ""
             )
 
-        # 4. Return JWT tokens
-        refresh = RefreshToken.for_user(user)
+        # 4. Return JWT tokens (same claims as password login, including role)
+        refresh = MyTokenObtainPairSerializer.get_token(user)
         return Response({
             "access": str(refresh.access_token),
             "refresh": str(refresh),
@@ -190,12 +194,22 @@ class TagLogListCreateView(generics.ListCreateAPIView):
     Team 1 uses this to send actual PLC values.
     Endpoint: /api/logs/
     """
+    permission_classes = [permissions.IsAuthenticated]
     queryset = TagLog.objects.all().order_by('-timestamp')
     serializer_class = TagLogSerializer
 
     def create(self, request, *args, **kwargs):
-        # We allow bulk logging or single logging
-        return super().create(request, *args, **kwargs)
+        is_bulk = isinstance(request.data, list)
+        serializer = self.get_serializer(data=request.data, many=is_bulk)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+
+        created_logs = serializer.instance if is_bulk else [serializer.instance]
+        for log in created_logs:
+            evaluate_alarm_for_log(log)
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -313,6 +327,7 @@ class PaymentCallbackView(generics.GenericAPIView):
             return Response({"error": "Failed to reach Chapa verification API"}, status=502)
 
 class ComplaintListCreateView(generics.ListCreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = ComplaintSerializer
 
     def get_queryset(self):
@@ -338,6 +353,147 @@ class ComplaintDetailView(generics.RetrieveUpdateAPIView):
         if user.role in ['admin', 'operator']:
             return Complaint.objects.all()
         return Complaint.objects.filter(user=user)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        prev_status = instance.status
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        complaint = serializer.save()
+        if (
+            prev_status == 'pending'
+            and complaint.status == 'investigating'
+            and complaint.first_response_at is None
+        ):
+            complaint.first_response_at = timezone.now()
+            complaint.save(update_fields=['first_response_at'])
+        complaint.refresh_from_db()
+        return Response(self.get_serializer(complaint).data)
+
+
+class AlarmRuleListCreateView(generics.ListCreateAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AlarmRuleSerializer
+    queryset = AlarmRule.objects.select_related('tag').all()
+
+    def get_queryset(self):
+        qs = self.queryset
+        tag_id = self.request.query_params.get('tag_id')
+        if tag_id:
+            qs = qs.filter(tag_id=tag_id)
+        if self.request.user.role == 'customer':
+            return qs.filter(is_enabled=True)
+        return qs
+
+    def perform_create(self, serializer):
+        if self.request.user.role not in ['admin', 'operator']:
+            raise permissions.PermissionDenied("Only admins/operators can create alarm rules.")
+        serializer.save()
+
+
+class AlarmEventListView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AlarmEventSerializer
+
+    def get_queryset(self):
+        qs = AlarmEvent.objects.select_related('rule', 'rule__tag', 'acknowledged_by', 'shelved_by')
+        state = self.request.query_params.get('state')
+        severity = self.request.query_params.get('severity')
+        tag_id = self.request.query_params.get('tag_id')
+        if state:
+            qs = qs.filter(state=state)
+        if severity:
+            qs = qs.filter(rule__severity=severity)
+        if tag_id:
+            qs = qs.filter(rule__tag_id=tag_id)
+        return qs
+
+
+class AlarmAcknowledgeView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AlarmAcknowledgeSerializer
+
+    def post(self, request, event_id):
+        if request.user.role not in ['admin', 'operator']:
+            return Response({"detail": "Only admins/operators can acknowledge alarms."}, status=403)
+
+        event = get_object_or_404(AlarmEvent, id=event_id)
+        if event.state in ['returned', 'suppressed']:
+            return Response({"detail": f"Cannot acknowledge an event in '{event.state}' state."}, status=400)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        event.state = 'acknowledged'
+        event.acknowledged_at = timezone.now()
+        event.acknowledged_by = request.user
+        event.ack_note = serializer.validated_data.get('ack_note', '')
+        event.save(update_fields=['state', 'acknowledged_at', 'acknowledged_by', 'ack_note'])
+        return Response(AlarmEventSerializer(event).data)
+
+
+class AlarmShelveView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AlarmShelveSerializer
+
+    def post(self, request, event_id):
+        if request.user.role not in ['admin', 'operator']:
+            return Response({"detail": "Only admins/operators can shelve alarms."}, status=403)
+
+        event = get_object_or_404(AlarmEvent, id=event_id)
+        if event.state == 'returned':
+            return Response({"detail": "Cannot shelve a returned event."}, status=400)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        minutes = serializer.validated_data.get('minutes', 30)
+        event.state = 'shelved'
+        event.shelved_by = request.user
+        event.shelve_note = serializer.validated_data.get('shelve_note', '')
+        event.shelved_until = timezone.now() + timedelta(minutes=minutes)
+        event.save(update_fields=['state', 'shelved_by', 'shelve_note', 'shelved_until'])
+        return Response(AlarmEventSerializer(event).data)
+
+
+class AlarmUnshelveView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, event_id):
+        if request.user.role not in ['admin', 'operator']:
+            return Response({"detail": "Only admins/operators can unshelve alarms."}, status=403)
+
+        event = get_object_or_404(AlarmEvent, id=event_id)
+        if event.state != 'shelved':
+            return Response({"detail": "Event is not shelved."}, status=400)
+
+        next_state = 'acknowledged' if event.acknowledged_at else 'active'
+        event.state = next_state
+        event.shelved_until = None
+        event.save(update_fields=['state', 'shelved_until'])
+        return Response(AlarmEventSerializer(event).data)
+
+
+class AlarmKPIView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        active_states = ['active', 'acknowledged', 'shelved']
+        base_qs = AlarmEvent.objects.select_related('rule')
+        standing_alarms = base_qs.filter(state__in=active_states).count()
+        critical_open = base_qs.filter(state__in=active_states, rule__severity='critical').count()
+        acknowledged = base_qs.filter(acknowledged_at__isnull=False).count()
+        total = base_qs.count()
+        ack_rate = round((acknowledged / total) * 100, 2) if total else 0
+
+        return Response(
+            {
+                "standing_alarms": standing_alarms,
+                "critical_open": critical_open,
+                "total_events": total,
+                "acknowledged_events": acknowledged,
+                "ack_rate_percent": ack_rate,
+            }
+        )
 
 # --- AI & ANALYTICS VIEWS ---
 
@@ -955,4 +1111,310 @@ class DeleteAccountView(generics.DestroyAPIView):
 
     def perform_destroy(self, instance):
         instance.delete()
+
+
+# --- TREND & ANNOTATIONS ---
+
+class TrendAnnotationListCreateView(generics.ListCreateAPIView):
+    """
+    Get/create trend annotations (incident markers) on tag data.
+    """
+    serializer_class = TrendAnnotationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        tag_id = self.request.query_params.get('tag_id')
+        qs = TrendAnnotation.objects.select_related('created_by')
+        if tag_id:
+            qs = qs.filter(tag_id=tag_id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class HistoryQueryView(generics.GenericAPIView):
+    """
+    Query tag history with optional time range filtering and aggregation.
+    Parameters: tag_id, start_time, end_time, aggregation (none|hourly|daily)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        tag_id = request.query_params.get('tag_id')
+        start_time_str = request.query_params.get('start_time')
+        end_time_str = request.query_params.get('end_time')
+        aggregation = request.query_params.get('aggregation', 'none')
+
+        if not tag_id:
+            return Response({'error': 'tag_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            tag = Tag.objects.get(id=tag_id)
+        except Tag.DoesNotExist:
+            return Response({'error': 'Tag not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        qs = TagLog.objects.filter(tag=tag).order_by('timestamp')
+
+        if start_time_str:
+            qs = qs.filter(timestamp__gte=datetime.fromisoformat(start_time_str))
+        if end_time_str:
+            qs = qs.filter(timestamp__lte=datetime.fromisoformat(end_time_str))
+
+        logs = list(qs.values('timestamp', 'value'))
+
+        return Response({
+            'tag': TagSerializer(tag).data,
+            'data': logs,
+            'count': len(logs),
+        })
+
+
+class HistoryExportCsvView(generics.GenericAPIView):
+    """
+    Export tag history to CSV.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        tag_id = request.query_params.get('tag_id')
+        start_time_str = request.query_params.get('start_time')
+        end_time_str = request.query_params.get('end_time')
+
+        if not tag_id:
+            return Response({'error': 'tag_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            tag = Tag.objects.get(id=tag_id)
+        except Tag.DoesNotExist:
+            return Response({'error': 'Tag not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        qs = TagLog.objects.filter(tag=tag).order_by('timestamp')
+
+        if start_time_str:
+            qs = qs.filter(timestamp__gte=datetime.fromisoformat(start_time_str))
+        if end_time_str:
+            qs = qs.filter(timestamp__lte=datetime.fromisoformat(end_time_str))
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Timestamp', 'Value', 'Unit'])
+
+        for log in qs:
+            writer.writerow([
+                log.timestamp.isoformat(),
+                log.value,
+                tag.unit or '',
+            ])
+
+        response = HttpResponse(output.getvalue(), content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="tag-{tag_id}-export.csv"'
+        return response
+
+
+# --- PLANT OPERATIONS ---
+
+class PlantOverviewView(generics.GenericAPIView):
+    """
+    Get plant overview data: areas, equipment, their latest tag values, and alarm counts.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        areas = PlantArea.objects.prefetch_related('equipment').order_by('sort_order')
+
+        result = []
+        for area in areas:
+            equipment_data = []
+            for eq in area.equipment.all():
+                # Get latest tag value if primary_tag is set
+                latest_value = None
+                if eq.primary_tag:
+                    latest_log = TagLog.objects.filter(tag=eq.primary_tag).order_by('-timestamp').first()
+                    if latest_log:
+                        latest_value = latest_log.value
+
+                # Count active alarms for this equipment (if linked via tag)
+                alarm_count = 0
+                if eq.primary_tag:
+                    alarm_count = AlarmEvent.objects.filter(
+                        rule__tag=eq.primary_tag,
+                        state__in=['active', 'acknowledged']
+                    ).count()
+
+                equipment_data.append({
+                    'id': eq.id,
+                    'code': eq.code,
+                    'name': eq.name,
+                    'primary_tag_id': eq.primary_tag_id,
+                    'primary_tag_name': eq.primary_tag.name if eq.primary_tag else None,
+                    'current_value': latest_value,
+                    'map_rect': eq.map_rect,
+                    'alarm_count': alarm_count,
+                })
+
+            result.append({
+                'id': area.id,
+                'code': area.code,
+                'name': area.name,
+                'layout': area.layout,
+                'equipment': equipment_data,
+            })
+
+        return Response({'areas': result})
+
+
+class OperatorJournalListCreateView(generics.ListCreateAPIView):
+    """
+    Get/create operator journal entries (shift logs).
+    """
+    serializer_class = OperatorJournalEntrySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = OperatorJournalEntry.objects.select_related(
+            'author', 'related_alarm_event', 'related_tag'
+        ).order_by('-occurred_at')
+
+        # Optional filtering by time range
+        start_time_str = self.request.query_params.get('start_time')
+        end_time_str = self.request.query_params.get('end_time')
+
+        if start_time_str:
+            qs = qs.filter(occurred_at__gte=datetime.fromisoformat(start_time_str))
+        if end_time_str:
+            qs = qs.filter(occurred_at__lte=datetime.fromisoformat(end_time_str))
+
+        # Operators see all, customers see none (or could limit to their complaints)
+        if self.request.user.role == User.CUSTOMER:
+            # Customers don't see the journal (or could see only entries related to their complaints)
+            qs = qs.none()
+
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+
+
+class EvaluateComplaintSlaView(generics.GenericAPIView):
+    """
+    Evaluate complaint SLAs and generate notifications for breaches.
+    (Could be called by a scheduled task or manually by admin)
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        if request.user.role != User.ADMIN:
+            return Response({'error': 'Only admins can run SLA evaluation'}, status=status.HTTP_403_FORBIDDEN)
+
+        now = timezone.now()
+        
+        # SLA: 24 hours for initial response (Medium priority)
+        # SLA: 4 hours for initial response (High priority)
+
+        complaints = Complaint.objects.filter(status__in=['pending', 'investigating'])
+        breached = []
+
+        for complaint in complaints:
+            sla_hours = 4 if complaint.priority == 'high' else 24
+            sla_deadline = complaint.created_at + timedelta(hours=sla_hours)
+
+            if now > sla_deadline and not complaint.sla_notification_sent_at:
+                # Create in-app notification
+                InAppNotification.objects.create(
+                    user=complaint.user,
+                    category=InAppNotification.CATEGORY_COMPLAINT_SLA,
+                    title=f"SLA Breach: {complaint.subject}",
+                    body=f"Support ticket #{complaint.id} has exceeded its SLA.",
+                    payload={'complaint_id': complaint.id}
+                )
+
+                complaint.sla_notification_sent_at = now
+                complaint.save(update_fields=['sla_notification_sent_at'])
+
+                breached.append(complaint.id)
+
+        return Response({
+            'breached_count': len(breached),
+            'complaint_ids': breached
+        })
+
+
+# --- NOTIFICATIONS ---
+
+class InAppNotificationListView(generics.ListAPIView):
+    """
+    Get user's in-app notifications, optionally filtered by read status.
+    """
+    serializer_class = InAppNotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = InAppNotification.objects.filter(user=self.request.user).order_by('-created_at')
+
+        is_read = self.request.query_params.get('is_read')
+        if is_read == 'true':
+            qs = qs.filter(read_at__isnull=False)
+        elif is_read == 'false':
+            qs = qs.filter(read_at__isnull=True)
+
+        return qs
+
+
+class InAppNotificationMarkReadView(generics.GenericAPIView):
+    """
+    Mark a single in-app notification as read.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        try:
+            notif = InAppNotification.objects.get(id=pk, user=request.user)
+        except InAppNotification.DoesNotExist:
+            return Response({'error': 'Notification not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        notif.read_at = timezone.now()
+        notif.save(update_fields=['read_at'])
+
+        return Response({'status': 'marked as read'})
+
+
+class InAppNotificationMarkAllReadView(generics.GenericAPIView):
+    """
+    Mark all user notifications as read.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        count = InAppNotification.objects.filter(
+            user=request.user,
+            read_at__isnull=True
+        ).update(read_at=timezone.now())
+
+        return Response({'marked_as_read': count})
+
+
+class NotificationSubscriptionListCreateView(generics.ListCreateAPIView):
+    """
+    List/create notification subscriptions (email, SMS, webhook).
+    """
+    serializer_class = NotificationSubscriptionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return NotificationSubscription.objects.filter(user=self.request.user).order_by('-created_at')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class NotificationSubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """
+    Get/update/delete a single notification subscription.
+    """
+    serializer_class = NotificationSubscriptionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return NotificationSubscription.objects.filter(user=self.request.user)
 

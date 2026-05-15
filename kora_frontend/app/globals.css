@@ -35,5 +35,13 @@
     color: var(--foreground) !important;
     transition: background-color 0.3s ease, color 0.3s ease;
   }
+
+  button, a, select, [role="button"], input[type="submit"], input[type="button"], input[type="checkbox"], input[type="radio"] {
+    cursor: pointer;
+  }
+
+  button:disabled, a:disabled {
+    cursor: not-allowed;
+  }
 }
 

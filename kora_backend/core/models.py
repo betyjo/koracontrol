@@ -31,6 +31,8 @@ class Tag(models.Model):
 class TagLog(models.Model):
     tag = models.ForeignKey(Tag, on_delete=models.CASCADE, related_name='logs')
     value = models.FloatField()
+    quality_code = models.CharField(max_length=12, default='good')  # good | bad | uncertain
+    source_timestamp = models.DateTimeField(null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -114,6 +116,8 @@ class Complaint(models.Model):
     description = models.TextField()
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
+    first_response_at = models.DateTimeField(null=True, blank=True)
+    sla_notification_sent_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -129,6 +133,215 @@ class AIAnalysis(models.Model):
 
     def __str__(self):
         return f"Analysis for {self.tag.name} - Anomaly: {self.is_anomaly}"
+
+
+class AlarmRule(models.Model):
+    SEVERITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+
+    tag = models.ForeignKey('core.Tag', on_delete=models.CASCADE, related_name='alarm_rules')
+    name = models.CharField(max_length=120)
+    is_enabled = models.BooleanField(default=True)
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='medium')
+    warning_high = models.FloatField(null=True, blank=True)
+    alarm_high = models.FloatField(null=True, blank=True)
+    warning_low = models.FloatField(null=True, blank=True)
+    alarm_low = models.FloatField(null=True, blank=True)
+    deadband = models.FloatField(default=0.0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['tag__name', 'name', 'id']
+        unique_together = [('tag', 'name')]
+
+    def __str__(self):
+        return f"{self.tag.name} :: {self.name}"
+
+
+class AlarmEvent(models.Model):
+    STATE_CHOICES = [
+        ('active', 'Active'),
+        ('acknowledged', 'Acknowledged'),
+        ('returned', 'Returned to normal'),
+        ('shelved', 'Shelved'),
+        ('suppressed', 'Suppressed'),
+    ]
+    LEVEL_CHOICES = [
+        ('warning', 'Warning'),
+        ('alarm', 'Alarm'),
+    ]
+
+    rule = models.ForeignKey(AlarmRule, on_delete=models.CASCADE, related_name='events')
+    tag_log = models.ForeignKey('core.TagLog', null=True, blank=True, on_delete=models.SET_NULL, related_name='alarm_events')
+    level = models.CharField(max_length=8, choices=LEVEL_CHOICES)
+    state = models.CharField(max_length=16, choices=STATE_CHOICES, default='active')
+    triggered_value = models.FloatField()
+    message = models.CharField(max_length=255, blank=True)
+    triggered_at = models.DateTimeField(auto_now_add=True)
+    returned_to_normal_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_by = models.ForeignKey(
+        'core.User',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='acknowledged_alarm_events',
+    )
+    ack_note = models.CharField(max_length=255, blank=True)
+    shelved_until = models.DateTimeField(null=True, blank=True)
+    shelved_by = models.ForeignKey(
+        'core.User',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='shelved_alarm_events',
+    )
+    shelve_note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ['-triggered_at']
+
+    def __str__(self):
+        return f"{self.rule.name} [{self.level}] - {self.state}"
+
+
+class PlantArea(models.Model):
+    """Logical plant zone for P&ID-style overview (areas aggregate alarms)."""
+
+    code = models.SlugField(max_length=64, unique=True)
+    name = models.CharField(max_length=120)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    layout = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ('sort_order', 'code')
+
+    def __str__(self):
+        return self.name
+
+
+class PlantEquipment(models.Model):
+    """Equipment shown on plant overview; optional primary tag for live badge."""
+
+    area = models.ForeignKey(PlantArea, on_delete=models.CASCADE, related_name='equipment')
+    code = models.SlugField(max_length=64)
+    name = models.CharField(max_length=120)
+    primary_tag = models.ForeignKey(
+        Tag,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='equipment_primary',
+    )
+    map_rect = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ('area_id', 'code')
+        unique_together = [('area', 'code')]
+
+    def __str__(self):
+        return f'{self.area.code}:{self.code}'
+
+
+class TrendAnnotation(models.Model):
+    """Incident / maintenance marker on trend charts."""
+
+    tag = models.ForeignKey(Tag, on_delete=models.CASCADE, related_name='trend_annotations')
+    at = models.DateTimeField(db_index=True)
+    label = models.CharField(max_length=120)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        'core.User',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='trend_annotations',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-at', '-id')
+
+    def __str__(self):
+        return f'{self.label} @ {self.at}'
+
+
+class OperatorJournalEntry(models.Model):
+    """Shift log / operator narrative tied to optional alarms or tags."""
+
+    author = models.ForeignKey('core.User', on_delete=models.CASCADE, related_name='journal_entries')
+    occurred_at = models.DateTimeField(db_index=True)
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    related_alarm_event = models.ForeignKey(
+        AlarmEvent,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='journal_entries',
+    )
+    related_tag = models.ForeignKey(
+        Tag,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='journal_entries',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-occurred_at', '-id')
+
+    def __str__(self):
+        return self.title
+
+
+class InAppNotification(models.Model):
+    CATEGORY_ALARM_CRITICAL = 'alarm_critical'
+    CATEGORY_COMPLAINT_SLA = 'complaint_sla'
+
+    user = models.ForeignKey('core.User', on_delete=models.CASCADE, related_name='in_app_notifications')
+    category = models.CharField(max_length=32)
+    title = models.CharField(max_length=200)
+    body = models.TextField(blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+
+    def __str__(self):
+        return f'{self.category}: {self.title}'
+
+
+class NotificationSubscription(models.Model):
+    CHANNEL_EMAIL = 'email'
+    CHANNEL_SMS = 'sms'
+    CHANNEL_WEBHOOK = 'webhook'
+
+    user = models.ForeignKey('core.User', on_delete=models.CASCADE, related_name='notification_subscriptions')
+    channel = models.CharField(max_length=16)
+    destination = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text='Email address, phone E.164, or webhook URL depending on channel.',
+    )
+    notify_alarm_critical = models.BooleanField(default=True)
+    notify_complaint_sla = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+
+    def __str__(self):
+        return f'{self.user.username} {self.channel}'
 
 
 class ChatThread(models.Model):

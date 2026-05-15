@@ -1,0 +1,68 @@
+{% extends "admin/index.html" %}
+{% load i18n static %}
+
+{% block content %}
+    {{ block.super }}
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Find all model cards
+            const modules = document.querySelectorAll('.dashboard .grow .module');
+            
+            modules.forEach(module => {
+                const caption = module.querySelector('caption');
+                if (!caption) return;
+
+                // Create search container
+                const searchContainer = document.createElement('div');
+                searchContainer.className = 'module-search-container';
+                searchContainer.style.cssText = 'padding: 0 1.5rem 1rem 1.5rem; display: flex; align-items: center; gap: 10px;';
+
+                const searchInput = document.createElement('input');
+                searchInput.type = 'text';
+                searchInput.placeholder = 'Filter ' + caption.textContent.trim() + ' models...';
+                searchInput.className = 'admin-model-search';
+                searchInput.style.cssText = `
+                    background: rgba(148, 163, 184, 0.05);
+                    border: 1px solid rgba(148, 163, 184, 0.2);
+                    border-radius: 12px;
+                    padding: 8px 16px;
+                    color: #f1f5f9;
+                    font-size: 0.85rem;
+                    width: 300px;
+                    transition: all 0.2s ease;
+                    outline: none;
+                `;
+
+                searchInput.addEventListener('focus', () => {
+                    searchInput.style.borderColor = '#3b82f6';
+                    searchInput.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.1)';
+                });
+
+                searchInput.addEventListener('blur', () => {
+                    searchInput.style.borderColor = 'rgba(148, 163, 184, 0.2)';
+                    searchInput.style.boxShadow = 'none';
+                });
+
+                searchInput.addEventListener('input', function() {
+                    const query = this.value.toLowerCase();
+                    const cards = module.querySelectorAll('tr[class*="model-"]');
+                    
+                    cards.forEach(card => {
+                        const text = card.textContent.toLowerCase();
+                        if (text.includes(query)) {
+                            card.style.display = 'flex';
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+                });
+
+                searchContainer.appendChild(searchInput);
+                
+                // Insert search after caption
+                caption.parentNode.insertBefore(searchContainer, caption.nextSibling);
+            });
+        });
+    </script>
+{% endblock %}

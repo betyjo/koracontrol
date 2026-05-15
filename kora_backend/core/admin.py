@@ -13,6 +13,14 @@ from .models import (
     Complaint,
     AIAnalysis,
     DashboardVisualization,
+    AlarmRule,
+    AlarmEvent,
+    PlantArea,
+    PlantEquipment,
+    TrendAnnotation,
+    OperatorJournalEntry,
+    InAppNotification,
+    NotificationSubscription,
 )
 
 @admin.register(User)
@@ -183,3 +191,55 @@ class AIAnalysisAdmin(ModelAdmin):
 
     def view_on_site(self, obj):
         return frontend_links.analytics_url(analysis_id=obj.pk)
+
+
+@admin.register(AlarmRule)
+class AlarmRuleAdmin(ModelAdmin):
+    list_display = ("name", "tag", "severity", "is_enabled", "updated_at")
+    list_filter = ("severity", "is_enabled", "tag")
+    search_fields = ("name", "tag__name")
+
+
+@admin.register(AlarmEvent)
+class AlarmEventAdmin(ModelAdmin):
+    list_display = ("rule", "level", "state", "triggered_value", "triggered_at", "acknowledged_by")
+    list_filter = ("state", "level", "rule__severity", "triggered_at")
+    search_fields = ("rule__name", "rule__tag__name", "message")
+
+
+@admin.register(PlantArea)
+class PlantAreaAdmin(ModelAdmin):
+    list_display = ("code", "name", "sort_order")
+    search_fields = ("code", "name")
+
+
+@admin.register(PlantEquipment)
+class PlantEquipmentAdmin(ModelAdmin):
+    list_display = ("code", "name", "area", "primary_tag")
+    list_filter = ("area",)
+    search_fields = ("code", "name")
+
+
+@admin.register(TrendAnnotation)
+class TrendAnnotationAdmin(ModelAdmin):
+    list_display = ("label", "tag", "at", "created_by")
+    list_filter = ("tag",)
+    search_fields = ("label", "notes")
+
+
+@admin.register(OperatorJournalEntry)
+class OperatorJournalEntryAdmin(ModelAdmin):
+    list_display = ("title", "author", "occurred_at", "related_alarm_event")
+    search_fields = ("title", "body")
+
+
+@admin.register(InAppNotification)
+class InAppNotificationAdmin(ModelAdmin):
+    list_display = ("user", "category", "title", "read_at", "created_at")
+    list_filter = ("category", "read_at")
+
+
+@admin.register(NotificationSubscription)
+class NotificationSubscriptionAdmin(ModelAdmin):
+    list_display = ("user", "channel", "destination", "notify_alarm_critical", "notify_complaint_sla", "is_active")
+    list_filter = ("channel", "is_active")

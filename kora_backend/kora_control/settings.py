@@ -101,6 +101,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'core.middleware.DisableCSRFForAPIMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -112,7 +113,7 @@ ROOT_URLCONF = 'kora_control.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -207,6 +208,13 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3001",
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+]
+
 # Allow local network frontend origins during development (e.g. http://192.168.x.x:3000).
 CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^https?://localhost:30\d{2}$",
@@ -273,7 +281,6 @@ UNFOLD = {
         "show_search": True,
         "show_all_applications": True,
         "navigation": [
-
             {
                 "title": "Authentication",
                 "separator": True,
@@ -286,7 +293,23 @@ UNFOLD = {
                 ],
             },
             {
-                "title": "Kora Engine",
+                "title": "Plant Infrastructure",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Plant areas",
+                        "icon": "factory",
+                        "link": "admin:core_plantarea_changelist",
+                    },
+                    {
+                        "title": "Plant equipments",
+                        "icon": "precision_manufacturing",
+                        "link": "admin:core_plantequipment_changelist",
+                    },
+                ],
+            },
+            {
+                "title": "Industrial Engine",
                 "separator": True,
                 "items": [
                     {
@@ -303,6 +326,48 @@ UNFOLD = {
                         "title": "Tag Logs",
                         "icon": "history",
                         "link": "admin:core_taglog_changelist",
+                    },
+                    {
+                        "title": "Trend annotations",
+                        "icon": "edit_note",
+                        "link": "admin:core_trendannotation_changelist",
+                    },
+                ],
+            },
+            {
+                "title": "Alarms & Notifications",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Alarm rules",
+                        "icon": "settings_alert",
+                        "link": "admin:core_alarmrule_changelist",
+                    },
+                    {
+                        "title": "Alarm events",
+                        "icon": "notifications_active",
+                        "link": "admin:core_alarmevent_changelist",
+                    },
+                    {
+                        "title": "In-app notifications",
+                        "icon": "notifications",
+                        "link": "admin:core_inappnotification_changelist",
+                    },
+                    {
+                        "title": "Subscriptions",
+                        "icon": "mark_email_read",
+                        "link": "admin:core_notificationsubscription_changelist",
+                    },
+                ],
+            },
+            {
+                "title": "Operations & AI",
+                "separator": True,
+                "items": [
+                    {
+                        "title": "Operator Journal",
+                        "icon": "auto_stories",
+                        "link": "admin:core_operatorjournalentry_changelist",
                     },
                     {
                         "title": "AI Analysis",

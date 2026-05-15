@@ -10,6 +10,14 @@ from .models import (
     ChatAttachment,
     PaymentTransaction,
     AIAnalysis,
+    AlarmRule,
+    AlarmEvent,
+    PlantArea,
+    PlantEquipment,
+    TrendAnnotation,
+    OperatorJournalEntry,
+    InAppNotification,
+    NotificationSubscription,
 )
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -41,9 +49,12 @@ class TagSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class TagLogSerializer(serializers.ModelSerializer):
+    tag_name = serializers.CharField(source='tag.name', read_only=True)
+
     class Meta:
         model = TagLog
-        fields = ['tag', 'value', 'timestamp']
+        fields = ['tag', 'tag_name', 'value', 'quality_code', 'source_timestamp', 'timestamp']
+        read_only_fields = ['timestamp']
 
 class BillSerializer(serializers.ModelSerializer):
     class Meta:
@@ -57,7 +68,17 @@ class ComplaintSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Complaint
-        fields = ['id', 'user', 'subject', 'description', 'status', 'priority', 'created_at']
+        fields = [
+            'id',
+            'user',
+            'subject',
+            'description',
+            'status',
+            'priority',
+            'created_at',
+            'updated_at',
+            'first_response_at',
+        ]
 
 class ComplaintUpdateSerializer(serializers.ModelSerializer):
     """ Used by Operators/Admins to change status """
@@ -162,3 +183,156 @@ class AIAnalysisSerializer(serializers.ModelSerializer):
             "explanation",
             "detected_at",
         ]
+
+
+class AlarmRuleSerializer(serializers.ModelSerializer):
+    tag_name = serializers.CharField(source='tag.name', read_only=True)
+
+    class Meta:
+        model = AlarmRule
+        fields = [
+            'id',
+            'tag',
+            'tag_name',
+            'name',
+            'is_enabled',
+            'severity',
+            'warning_high',
+            'alarm_high',
+            'warning_low',
+            'alarm_low',
+            'deadband',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class AlarmEventSerializer(serializers.ModelSerializer):
+    rule_name = serializers.CharField(source='rule.name', read_only=True)
+    tag_id = serializers.IntegerField(source='rule.tag_id', read_only=True)
+    tag_name = serializers.CharField(source='rule.tag.name', read_only=True)
+    acknowledged_by_username = serializers.CharField(source='acknowledged_by.username', read_only=True)
+    shelved_by_username = serializers.CharField(source='shelved_by.username', read_only=True)
+    severity = serializers.CharField(source='rule.severity', read_only=True)
+
+    class Meta:
+        model = AlarmEvent
+        fields = [
+            'id',
+            'rule',
+            'rule_name',
+            'tag_id',
+            'tag_name',
+            'severity',
+            'level',
+            'state',
+            'triggered_value',
+            'message',
+            'triggered_at',
+            'returned_to_normal_at',
+            'acknowledged_at',
+            'acknowledged_by',
+            'acknowledged_by_username',
+            'ack_note',
+            'shelved_until',
+            'shelved_by',
+            'shelved_by_username',
+            'shelve_note',
+        ]
+        read_only_fields = [
+            'triggered_at',
+            'returned_to_normal_at',
+            'acknowledged_at',
+            'acknowledged_by',
+            'shelved_by',
+        ]
+
+
+class AlarmAcknowledgeSerializer(serializers.Serializer):
+    ack_note = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+
+class AlarmShelveSerializer(serializers.Serializer):
+    minutes = serializers.IntegerField(required=False, min_value=1, max_value=1440, default=30)
+    shelve_note = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+
+class PlantEquipmentSerializer(serializers.ModelSerializer):
+    primary_tag_name = serializers.CharField(source='primary_tag.name', read_only=True)
+
+    class Meta:
+        model = PlantEquipment
+        fields = ['id', 'area', 'code', 'name', 'primary_tag', 'primary_tag_name', 'map_rect']
+
+
+class TrendAnnotationSerializer(serializers.ModelSerializer):
+    author_username = serializers.CharField(source='created_by.username', read_only=True)
+
+    class Meta:
+        model = TrendAnnotation
+        fields = [
+            'id',
+            'tag',
+            'at',
+            'label',
+            'notes',
+            'created_by',
+            'author_username',
+            'created_at',
+        ]
+        read_only_fields = ['created_by', 'created_at']
+
+
+class OperatorJournalEntrySerializer(serializers.ModelSerializer):
+    author_username = serializers.CharField(source='author.username', read_only=True)
+
+    class Meta:
+        model = OperatorJournalEntry
+        fields = [
+            'id',
+            'author',
+            'author_username',
+            'occurred_at',
+            'title',
+            'body',
+            'related_alarm_event',
+            'related_tag',
+            'created_at',
+        ]
+        read_only_fields = ['author', 'created_at']
+
+
+class InAppNotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InAppNotification
+        fields = ['id', 'category', 'title', 'body', 'payload', 'read_at', 'created_at']
+        read_only_fields = ['category', 'title', 'body', 'payload', 'created_at']
+
+
+class NotificationSubscriptionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NotificationSubscription
+        fields = [
+            'id',
+            'channel',
+            'destination',
+            'notify_alarm_critical',
+            'notify_complaint_sla',
+            'is_active',
+            'created_at',
+        ]
+        read_only_fields = ['created_at']
+
+    def validate(self, attrs):
+        inst = self.instance
+        channel = attrs.get('channel')
+        if channel is None and inst:
+            channel = inst.channel
+        dest = attrs.get('destination')
+        if dest is None and inst:
+            dest = inst.destination
+        dest = (dest or '').strip()
+        if channel == NotificationSubscription.CHANNEL_WEBHOOK and not dest:
+            raise serializers.ValidationError({'destination': 'Webhook channel requires a destination URL.'})
+        return attrs

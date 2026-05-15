@@ -25,8 +25,12 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   if (hasValidToken()) {
     const token = localStorage.getItem('token');
-    config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
+    }
   }
+  // Ensure we don't send session cookies that trigger CSRF in Django
+  config.withCredentials = false;
   return config;
 });
 
@@ -105,6 +109,32 @@ export interface ChatAttachment {
   created_at: string;
 }
 
+export interface AlarmEvent {
+  id: number;
+  rule: number;
+  rule_name: string;
+  tag_id: number;
+  tag_name: string;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  level: 'warning' | 'alarm';
+  state: 'active' | 'acknowledged' | 'returned' | 'shelved' | 'suppressed';
+  triggered_value: number;
+  message: string;
+  triggered_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by_username: string | null;
+  ack_note: string;
+  shelved_until: string | null;
+}
+
+export interface AlarmKpis {
+  standing_alarms: number;
+  critical_open: number;
+  total_events: number;
+  acknowledged_events: number;
+  ack_rate_percent: number;
+}
+
 export const dashboardApi = {
   // Get dashboard stats (current usage, pending bill, active tickets)
   getStats: () => api.get<DashboardStats>('/dashboard/stats/'),
@@ -142,6 +172,17 @@ export const aiChatApi = {
 
   exportThread: (threadId: number, format: 'json' | 'csv' = 'json') =>
     api.get(`/ai/threads/${threadId}/export/?format=${format}`, { responseType: 'blob' }),
+};
+
+export const alarmApi = {
+  listEvents: (params?: { state?: string; severity?: string; tag_id?: number }) =>
+    api.get<AlarmEvent[]>('/alarms/events/', { params }),
+  getKpis: () => api.get<AlarmKpis>('/alarms/kpis/'),
+  acknowledge: (eventId: number, ack_note = '') =>
+    api.post<AlarmEvent>(`/alarms/events/${eventId}/ack/`, { ack_note }),
+  shelve: (eventId: number, minutes = 30, shelve_note = '') =>
+    api.post<AlarmEvent>(`/alarms/events/${eventId}/shelve/`, { minutes, shelve_note }),
+  unshelve: (eventId: number) => api.post<AlarmEvent>(`/alarms/events/${eventId}/unshelve/`),
 };
 
 export default api;
