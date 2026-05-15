@@ -19,6 +19,15 @@ class User(AbstractUser):
     def __str__(self):
         return f"{self.username} ({self.role})"
 
+    def save(self, *args, **kwargs):
+        # Ensure superusers always have the admin role
+        if self.is_superuser and self.role != self.ADMIN:
+            self.role = self.ADMIN
+        # Ensure staff always have at least operator role if they are not admin
+        elif self.is_staff and self.role == self.CUSTOMER:
+            self.role = self.OPERATOR
+        super().save(*args, **kwargs)
+
 class Tag(models.Model):
     name = models.CharField(max_length=100, unique=True) # e.g., "Boiler_Temp"
     data_type = models.CharField(max_length=20, default="float")

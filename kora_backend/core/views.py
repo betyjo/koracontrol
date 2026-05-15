@@ -415,7 +415,7 @@ class AlarmAcknowledgeView(generics.GenericAPIView):
     serializer_class = AlarmAcknowledgeSerializer
 
     def post(self, request, event_id):
-        if request.user.role not in ['admin', 'operator']:
+        if request.user.role not in ['admin', 'operator'] and not request.user.is_staff and not request.user.is_superuser:
             return Response({"detail": "Only admins/operators can acknowledge alarms."}, status=403)
 
         event = get_object_or_404(AlarmEvent, id=event_id)
@@ -437,7 +437,7 @@ class AlarmShelveView(generics.GenericAPIView):
     serializer_class = AlarmShelveSerializer
 
     def post(self, request, event_id):
-        if request.user.role not in ['admin', 'operator']:
+        if request.user.role not in ['admin', 'operator'] and not request.user.is_staff and not request.user.is_superuser:
             return Response({"detail": "Only admins/operators can shelve alarms."}, status=403)
 
         event = get_object_or_404(AlarmEvent, id=event_id)
@@ -459,7 +459,7 @@ class AlarmUnshelveView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, event_id):
-        if request.user.role not in ['admin', 'operator']:
+        if request.user.role not in ['admin', 'operator'] and not request.user.is_staff and not request.user.is_superuser:
             return Response({"detail": "Only admins/operators can unshelve alarms."}, status=403)
 
         event = get_object_or_404(AlarmEvent, id=event_id)

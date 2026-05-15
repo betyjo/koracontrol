@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bell, CheckCircle2, Loader2, PauseCircle, RefreshCw } from "lucide-react";
 import { PageTransition } from "@/components/PageTransition";
 import { alarmApi, AlarmEvent, AlarmKpis } from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
 
 const severityOrder: Record<string, number> = {
   critical: 0,
@@ -13,6 +14,7 @@ const severityOrder: Record<string, number> = {
 };
 
 export default function AlarmsPage() {
+  const { showToast } = useToast();
   const [events, setEvents] = useState<AlarmEvent[]>([]);
   const [kpis, setKpis] = useState<AlarmKpis | null>(null);
   const [loading, setLoading] = useState(true);
@@ -66,7 +68,13 @@ export default function AlarmsPage() {
     try {
       setActionLoadingId(id);
       await alarmApi.acknowledge(id, "Acknowledged from alarm console");
+      showToast("Alarm acknowledged successfully", "success");
       await load();
+    } catch (err: any) {
+      const msg = err.response?.status === 403 
+        ? "Permission Denied: Only Admins/Operators can act on alarms." 
+        : "Failed to acknowledge alarm.";
+      showToast(msg, "error");
     } finally {
       setActionLoadingId(null);
     }
@@ -76,7 +84,13 @@ export default function AlarmsPage() {
     try {
       setActionLoadingId(id);
       await alarmApi.shelve(id, 30, "Temporary shelving from alarm console");
+      showToast("Alarm shelved for 30 minutes", "success");
       await load();
+    } catch (err: any) {
+      const msg = err.response?.status === 403 
+        ? "Permission Denied: Only Admins/Operators can act on alarms." 
+        : "Failed to shelve alarm.";
+      showToast(msg, "error");
     } finally {
       setActionLoadingId(null);
     }
@@ -86,7 +100,13 @@ export default function AlarmsPage() {
     try {
       setActionLoadingId(id);
       await alarmApi.unshelve(id);
+      showToast("Alarm unshelved", "success");
       await load();
+    } catch (err: any) {
+      const msg = err.response?.status === 403 
+        ? "Permission Denied: Only Admins/Operators can act on alarms." 
+        : "Failed to unshelve alarm.";
+      showToast(msg, "error");
     } finally {
       setActionLoadingId(null);
     }
