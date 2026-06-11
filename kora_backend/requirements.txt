@@ -1,8 +1,21 @@
 # Backend Python deps (install: pip install -r requirements.txt)
 joblib>=1.3
+paho-mqtt>=1.6.1
 google-generativeai>=0.8
 # Needed to load anomaly_model.pkl (Isolation Forest)
 scikit-learn>=1.3
 django-unfold
 python-dotenv
 pypdf
+apscheduler>=3.10.4
+django-apscheduler>=0.6.2
+django
+djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
+psycopg[binary]
+# Biometric authentication dependencies
+face_recognition>=1.3.0
+face_recognition_models>=0.3.0
+Pillow>=8.0.0
+setuptools<70.0.0  # Needed for pkg_resources (face_recognition_models dependency)

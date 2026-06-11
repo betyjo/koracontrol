@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ProgressBar?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<VBox spacing="20" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+      style="-fx-background-color: #071426;">
+
+    <padding>
+        <Insets top="20" right="20" bottom="20" left="20"/>
+    </padding>
+
+    <!-- Header -->
+    <HBox alignment="CENTER_LEFT" spacing="15">
+        <Label text="SYSTEM DIAGNOSTICS" styleClass="title-text" style="-fx-font-size: 28px;"/>
+        <Region HBox.hgrow="ALWAYS"/>
+        <Label fx:id="lastUpdateLabel" text="Last update: --" styleClass="label-text"/>
+    </HBox>
+
+    <!-- Row 1: MQTT, Tag Engine, JVM -->
+    <HBox spacing="20">
+        <!-- MQTT Connection Card -->
+        <VBox spacing="12" styleClass="card diag-card" HBox.hgrow="ALWAYS">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <Label text="MQTT CONNECTION" styleClass="subtitle-text"/>
+            <VBox spacing="10">
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Status:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="mqttStatusLabel" text="Checking..." styleClass="status-offline"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Messages Received:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="mqttMsgCountLabel" text="0" styleClass="value-text"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Reconnect Count:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="mqttReconnectLabel" text="0" styleClass="value-text"/>
+                </HBox>
+            </VBox>
+        </VBox>
+
+        <!-- Tag Engine Card -->
+        <VBox spacing="12" styleClass="card diag-card" HBox.hgrow="ALWAYS">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <Label text="TAG ENGINE" styleClass="subtitle-text"/>
+            <VBox spacing="10">
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Double Tags:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="doubleTagCountLabel" text="0" styleClass="value-text"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Boolean Tags:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="booleanTagCountLabel" text="0" styleClass="value-text"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="String Tags:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="stringTagCountLabel" text="0" styleClass="value-text"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Total Tags:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="totalTagCountLabel" text="0" styleClass="value-text" style="-fx-text-fill: #00ff9d;"/>
+                </HBox>
+            </VBox>
+        </VBox>
+
+        <!-- JVM Memory Card -->
+        <VBox spacing="12" styleClass="card diag-card" HBox.hgrow="ALWAYS">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <Label text="JVM MEMORY" styleClass="subtitle-text"/>
+            <VBox spacing="10">
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Used Heap:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="jvmUsedLabel" text="0 MB" styleClass="value-text"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Max Heap:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="jvmMaxLabel" text="0 MB" styleClass="value-text"/>
+                </HBox>
+                <ProgressBar fx:id="jvmProgressBar" prefWidth="200" progress="0.0"
+                             styleClass="progress-bar"/>
+                <Label fx:id="jvmPercentLabel" text="0% used" styleClass="label-text" style="-fx-font-size: 12px;"/>
+            </VBox>
+        </VBox>
+    </HBox>
+
+    <!-- Row 2: System Info -->
+    <HBox spacing="20">
+        <!-- Connection Uptime Card -->
+        <VBox spacing="12" styleClass="card diag-card" HBox.hgrow="ALWAYS">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <Label text="CONNECTION UPTIME" styleClass="subtitle-text"/>
+            <VBox spacing="10">
+                <Label fx:id="uptimeValueLabel" text="00:00:00" styleClass="kpi-value good" style="-fx-font-size: 36px;"/>
+                <Label fx:id="uptimeSinceLabel" text="Since: --" styleClass="label-text"/>
+            </VBox>
+        </VBox>
+
+        <!-- Alarm System Card -->
+        <VBox spacing="12" styleClass="card diag-card" HBox.hgrow="ALWAYS">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <Label text="ALARM SYSTEM" styleClass="subtitle-text"/>
+            <VBox spacing="10">
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Active Alarms:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="activeAlarmsLabel" text="0" styleClass="value-text"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Acknowledged:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="ackedAlarmsLabel" text="0" styleClass="value-text"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Total (History):" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="totalAlarmsLabel" text="0" styleClass="value-text"/>
+                </HBox>
+            </VBox>
+        </VBox>
+
+        <!-- Engine Info Card -->
+        <VBox spacing="12" styleClass="card diag-card" HBox.hgrow="ALWAYS">
+            <padding><Insets top="20" right="20" bottom="20" left="20"/></padding>
+            <Label text="ENGINE" styleClass="subtitle-text"/>
+            <VBox spacing="10">
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Java Version:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="javaVersionLabel" text="--" styleClass="value-text" style="-fx-font-size: 13px;"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="JavaFX Version:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="javafxVersionLabel" text="--" styleClass="value-text" style="-fx-font-size: 13px;"/>
+                </HBox>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="Available Processors:" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Label fx:id="processorCountLabel" text="--" styleClass="value-text"/>
+                </HBox>
+            </VBox>
+        </VBox>
+    </HBox>
+</VBox>

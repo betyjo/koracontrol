@@ -16,10 +16,21 @@ interface JournalEntry {
   created_at: string;
 }
 
+interface Tag {
+  id: number;
+  name: string;
+}
+
+interface Alarm {
+  id: number;
+  rule_name?: string;
+  message?: string;
+}
+
 export default function OperatorJournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
-  const [tags, setTags] = useState<any[]>([]);
-  const [alarms, setAlarms] = useState<any[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -37,8 +48,8 @@ export default function OperatorJournalPage() {
     try {
       setLoading(true);
       const params = new URLSearchParams();
-      if (startDate) params.append('start_time', `${startDate}T00:00:00Z`);
-      if (endDate) params.append('end_time', `${endDate}T23:59:59Z`);
+      if (startDate) params.append('start', `${startDate}T00:00:00Z`);
+      if (endDate) params.append('end', `${endDate}T23:59:59Z`);
 
       const res = await api.get(`/operations/journal/?${params.toString()}`);
       setEntries(res.data || []);

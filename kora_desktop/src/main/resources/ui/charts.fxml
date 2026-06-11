@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.chart.*?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            style="-fx-background-color: #071426;">
+
+    <!-- Header -->
+    <top>
+        <VBox spacing="20">
+            <padding>
+                <Insets top="20" right="20" bottom="10" left="20"/>
+            </padding>
+            
+            <HBox alignment="CENTER_LEFT" spacing="15">
+                <Label text="TRENDS &amp; ANALYTICS" styleClass="title-text" style="-fx-font-size: 28px;"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <HBox spacing="10" alignment="CENTER">
+                    <Label text="Time Range:" styleClass="label-text"/>
+                    <ComboBox fx:id="timeRangeCombo" prefWidth="150" styleClass="combo-box"/>
+                </HBox>
+            </HBox>
+            
+            <!-- Chart Selection Tabs -->
+            <HBox spacing="10" alignment="CENTER_LEFT">
+                <ToggleButton fx:id="flowToggle" text="Flow Rate" selected="true" styleClass="button-sidebar"/>
+                <ToggleButton fx:id="pressureToggle" text="Pressure" styleClass="button-sidebar"/>
+                <ToggleButton fx:id="temperatureToggle" text="Temperature" styleClass="button-sidebar"/>
+                <ToggleButton fx:id="levelToggle" text="Tank Level" styleClass="button-sidebar"/>
+                <ToggleButton fx:id="phToggle" text="pH Level" styleClass="button-sidebar"/>
+                <ToggleButton fx:id="energyToggle" text="Energy" styleClass="button-sidebar"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <CheckBox fx:id="showSetpointsCheck" text="Show Setpoints" selected="false" styleClass="check-box"/>
+                <CheckBox fx:id="liveUpdateCheck" text="Live Update" selected="true" styleClass="check-box"/>
+                <Button fx:id="exportButton" text="Export Data" styleClass="button-secondary"/>
+            </HBox>
+        </VBox>
+    </top>
+
+    <!-- Main Chart Area -->
+    <center>
+        <ScrollPane fitToWidth="true" fitToHeight="true" style="-fx-background-color: transparent; -fx-border-color: transparent;">
+            <VBox spacing="20">
+                <padding>
+                    <Insets top="10" right="20" bottom="20" left="20"/>
+                </padding>
+                
+                <!-- Main Trend Chart -->
+                <VBox spacing="15" styleClass="card">
+                    <padding>
+                        <Insets top="20" right="20" bottom="20" left="20"/>
+                    </padding>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="15">
+                        <Label fx:id="mainChartTitle" text="Flow Rate Trends" styleClass="subtitle-text"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <HBox spacing="15" alignment="CENTER">
+                            <Label text="Current:" styleClass="label-text"/>
+                            <Label fx:id="currentValueLabel" text="245.8 L/min" styleClass="value-text"/>
+                            <Label text="Average:" styleClass="label-text"/>
+                            <Label fx:id="averageValueLabel" text="242.3 L/min" styleClass="value-text"/>
+                            <Label text="Peak:" styleClass="label-text"/>
+                            <Label fx:id="peakValueLabel" text="268.4 L/min" styleClass="value-text" style="-fx-text-fill: #00ff9d;"/>
+                            <Label text="|" style="-fx-text-fill: #1a3a5c;"/>
+                            <Label fx:id="setpointDeviationLabel" text="Δ Setpoint: --" styleClass="label-text" style="-fx-text-fill: #00d4ff; -fx-font-size: 12px;"/>
+                        </HBox>
+                    </HBox>
+                    
+                    <LineChart fx:id="mainTrendChart" createSymbols="false" legendVisible="true" 
+                              styleClass="chart-dark" prefHeight="350">
+                        <xAxis>
+                            <NumberAxis side="BOTTOM" label="Time" tickLabelFill="#b8c5d6" fx:id="mainXAxis"/>
+                        </xAxis>
+                        <yAxis>
+                            <NumberAxis side="LEFT" label="Value" tickLabelFill="#b8c5d6" fx:id="mainYAxis"/>
+                        </yAxis>
+                    </LineChart>
+                </VBox>
+                
+                <!-- Secondary Charts Grid -->
+                <HBox spacing="20">
+                    <!-- Comparative Chart -->
+                    <VBox spacing="15" styleClass="card" HBox.hgrow="ALWAYS">
+                        <padding>
+                            <Insets top="20" right="20" bottom="20" left="20"/>
+                        </padding>
+                        <Label text="Parameter Comparison" styleClass="subtitle-text" style="-fx-font-size: 14px;"/>
+                        <BarChart fx:id="comparisonChart" legendVisible="false" styleClass="chart-dark" prefHeight="250">
+                            <xAxis>
+                                <CategoryAxis side="BOTTOM" tickLabelFill="#b8c5d6"/>
+                            </xAxis>
+                            <yAxis>
+                                <NumberAxis side="LEFT" tickLabelFill="#b8c5d6"/>
+                            </yAxis>
+                        </BarChart>
+                    </VBox>
+                    
+                    <!-- Distribution Chart -->
+                    <VBox spacing="15" styleClass="card" HBox.hgrow="ALWAYS">
+                        <padding>
+                            <Insets top="20" right="20" bottom="20" left="20"/>
+                        </padding>
+                        <Label text="Value Distribution" styleClass="subtitle-text" style="-fx-font-size: 14px;"/>
+                        <PieChart fx:id="distributionChart" legendVisible="true" styleClass="chart-dark" prefHeight="350"/>
+                    </VBox>
+                </HBox>
+                
+                <!-- Historical Performance -->
+                <VBox spacing="15" styleClass="card">
+                    <padding>
+                        <Insets top="20" right="20" bottom="20" left="20"/>
+                    </padding>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="15">
+                        <Label text="Historical Performance" styleClass="subtitle-text"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <HBox spacing="10" alignment="CENTER">
+                            <CheckBox fx:id="showTodayCheck" text="Today" selected="true" styleClass="check-box"/>
+                            <CheckBox fx:id="showYesterdayCheck" text="Yesterday" selected="false" styleClass="check-box"/>
+                            <CheckBox fx:id="showWeekCheck" text="Last Week" selected="false" styleClass="check-box"/>
+                        </HBox>
+                    </HBox>
+                    
+                    <LineChart fx:id="historicalChart" createSymbols="false" legendVisible="true" 
+                              styleClass="chart-dark" prefHeight="300">
+                        <xAxis>
+                            <NumberAxis side="BOTTOM" label="Time (hours)" tickLabelFill="#b8c5d6"/>
+                        </xAxis>
+                        <yAxis>
+                            <NumberAxis side="LEFT" label="Flow Rate (L/min)" tickLabelFill="#b8c5d6"/>
+                        </yAxis>
+                    </LineChart>
+                </VBox>
+                
+                <!-- Statistics Summary -->
+                <VBox spacing="15" styleClass="card">
+                    <padding>
+                        <Insets top="20" right="20" bottom="20" left="20"/>
+                    </padding>
+                    
+                    <Label text="Statistical Summary" styleClass="subtitle-text"/>
+                    
+                    <GridPane hgap="20" vgap="15">
+                        <children>
+                            <!-- Flow Rate Stats -->
+                            <VBox spacing="8" GridPane.columnIndex="0" GridPane.rowIndex="0">
+                                <Label text="FLOW RATE" styleClass="kpi-title"/>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Mean:" styleClass="label-text"/>
+                                    <Label text="242.3" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Std Dev:" styleClass="label-text"/>
+                                    <Label text="12.4" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Min:" styleClass="label-text"/>
+                                    <Label text="198.2" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Max:" styleClass="label-text"/>
+                                    <Label text="268.4" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                            </VBox>
+                            
+                            <!-- Pressure Stats -->
+                            <VBox spacing="8" GridPane.columnIndex="1" GridPane.rowIndex="0">
+                                <Label text="PRESSURE" styleClass="kpi-title"/>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Mean:" styleClass="label-text"/>
+                                    <Label text="4.2" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Std Dev:" styleClass="label-text"/>
+                                    <Label text="0.3" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Min:" styleClass="label-text"/>
+                                    <Label text="3.8" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Max:" styleClass="label-text"/>
+                                    <Label text="4.6" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                            </VBox>
+                            
+                            <!-- Temperature Stats -->
+                            <VBox spacing="8" GridPane.columnIndex="2" GridPane.rowIndex="0">
+                                <Label text="TEMPERATURE" styleClass="kpi-title"/>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Mean:" styleClass="label-text"/>
+                                    <Label text="67.5" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Std Dev:" styleClass="label-text"/>
+                                    <Label text="2.1" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Min:" styleClass="label-text"/>
+                                    <Label text="64.2" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Max:" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                    <Label text="71.8" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                            </VBox>
+                            
+                            <!-- pH Stats -->
+                            <VBox spacing="8" GridPane.columnIndex="3" GridPane.rowIndex="0">
+                                <Label text="pH LEVEL" styleClass="kpi-title"/>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Mean:" styleClass="label-text"/>
+                                    <Label text="7.4" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Std Dev:" styleClass="label-text"/>
+                                    <Label text="0.15" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Min:" styleClass="label-text"/>
+                                    <Label text="7.1" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                                <HBox spacing="10" alignment="CENTER_LEFT">
+                                    <Label text="Max:" styleClass="label-text"/>
+                                    <Label text="7.6" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                                </HBox>
+                            </VBox>
+                        </children>
+                        
+                        <columnConstraints>
+                            <ColumnConstraints hgrow="ALWAYS" percentWidth="25"/>
+                            <ColumnConstraints hgrow="ALWAYS" percentWidth="25"/>
+                            <ColumnConstraints hgrow="ALWAYS" percentWidth="25"/>
+                            <ColumnConstraints hgrow="ALWAYS" percentWidth="25"/>
+                        </columnConstraints>
+                    </GridPane>
+                </VBox>
+            </VBox>
+        </ScrollPane>
+    </center>
+
+</BorderPane>

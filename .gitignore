@@ -1,41 +1,82 @@
+# ============================================
 # Root .gitignore for koracontrol
+# ============================================
 
-# --- Frontend ---
+# --- Python (shared) ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+*.log
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+.installed.cfg
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+!.env.example
+!.env.local.example
+*.pem
+*.key
+*.jks
+*.p12
+
+# --- IDE & OS ---
+.vscode/
+.idea/
+*.iml
+*.ipr
+*.iws
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.atom/
+.history
+.svn/
+
+# ============================================
+# kora_frontend (Next.js)
+# ============================================
 kora_frontend/node_modules/
 kora_frontend/.next/
 kora_frontend/out/
 kora_frontend/build/
 kora_frontend/.vercel
 kora_frontend/next-env.d.ts
+kora_frontend/.next/static/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.tsbuildinfo
 
-# --- Backend ---
+# ============================================
+# kora_backend (Django)
+# ============================================
 kora_backend/venv/
 kora_backend/env/
 kora_backend/ENV/
 kora_backend/.venv
 kora_backend/db.sqlite3
 kora_backend/db.sqlite3-journal
-kora_backend/__pycache__/
-kora_backend/*.py[cod]
-kora_backend/*$py.class
-kora_backend/*.so
-kora_backend/.Python
 kora_backend/build/
-kora_backend/develop-eggs/
-kora_backend/dist/
-kora_backend/downloads/
-kora_backend/eggs/
-kora_backend/.eggs/
-kora_backend/lib/
-kora_backend/lib64/
-kora_backend/parts/
-kora_backend/sdist/
-kora_backend/var/
-kora_backend/wheels/
-kora_backend/*.egg-info/
-kora_backend/.installed.cfg
-kora_backend/*.egg
-kora_backend/*.log
 kora_backend/local_settings.py
 kora_backend/media/
 kora_backend/staticfiles/
@@ -43,23 +84,96 @@ kora_backend/verify_*.py
 kora_backend/reproduce_*.py
 kora_backend/set_admin_password.py
 
-# --- IDE & OS ---
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
+# ============================================
+# kora_mobile (Flutter / Dart)
+# ============================================
+# Dart / Flutter
+kora_mobile/.dart_tool/
+kora_mobile/.flutter-plugins
+kora_mobile/.flutter-plugins-dependencies
+kora_mobile/.pub-cache/
+kora_mobile/.pub/
+kora_mobile/build/
+kora_mobile/coverage/
+kora_mobile/.build/
+kora_mobile/.buildlog/
+kora_mobile/.swiftpm/
+kora_mobile/migrate_working_dir/
+kora_mobile/**/doc/api/
+kora_mobile/**/ios/Flutter/.last_build_id
 
-# --- General ---
-.env
-.env*
-*.pem
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-*.tsbuildinfo
-__pycache__/
+# Symbolication & Obfuscation
+kora_mobile/app.*.symbols
+kora_mobile/app.*.map.json
+
+# Generated plugin registrant
+kora_mobile/lib/generated_plugin_registrant.dart
+
+# Android
+kora_mobile/**/android/.gradle
+kora_mobile/**/android/app/debug
+kora_mobile/**/android/app/profile
+kora_mobile/**/android/app/release
+kora_mobile/**/android/captures/
+kora_mobile/**/android/gradlew
+kora_mobile/**/android/gradlew.bat
+kora_mobile/**/android/local.properties
+kora_mobile/**/android/**/GeneratedPluginRegistrant.java
+kora_mobile/**/android/key.properties
+
+# iOS
+kora_mobile/**/ios/**/*.mode1v3
+kora_mobile/**/ios/**/*.mode2v3
+kora_mobile/**/ios/**/*.moved-aside
+kora_mobile/**/ios/**/*.pbxuser
+kora_mobile/**/ios/**/*.perspectivev3
+kora_mobile/**/ios/**/*sync/
+kora_mobile/**/ios/**/.sconsign.dblite
+kora_mobile/**/ios/**/.tags*
+kora_mobile/**/ios/**/.vagrant/
+kora_mobile/**/ios/**/DerivedData/
+kora_mobile/**/ios/**/Icon?
+kora_mobile/**/ios/**/Pods/
+kora_mobile/**/ios/**/.symlinks/
+kora_mobile/**/ios/**/profile
+kora_mobile/**/ios/**/xcuserdata
+kora_mobile/**/ios/.generated/
+kora_mobile/**/ios/Flutter/App.framework
+kora_mobile/**/ios/Flutter/Flutter.framework
+kora_mobile/**/ios/Flutter/Flutter.podspec
+kora_mobile/**/ios/Flutter/Generated.xcconfig
+kora_mobile/**/ios/Flutter/ephemeral/
+kora_mobile/**/ios/Flutter/app.flx
+kora_mobile/**/ios/Flutter/app.zip
+kora_mobile/**/ios/Flutter/flutter_assets/
+kora_mobile/**/ios/Flutter/flutter_export_environment.sh
+kora_mobile/**/ios/ServiceDefinitions.json
+kora_mobile/**/ios/Runner/GeneratedPluginRegistrant.*
+
+# ============================================
+# kora_desktop (Java / Maven)
+# ============================================
 kora_desktop/target/
+*.class
+
+# ============================================
+# kora_engine & kora_ai (Python)
+# ============================================
+kora_engine/__pycache__/
+kora_engine/.venv/
+kora_ai/__pycache__/
+kora_ai/.venv/
+kora_ai/*.pkl
+kora_ai/models/*.pkl
+
+# ============================================
+# kora_simulation
+# ============================================
+kora_simulation/esp32_water_control/build/
+kora_simulation/__pycache__/
+
+# ============================================
+# Linting & Code Quality
+# ============================================
+.stylelintcache
+.eslintcache

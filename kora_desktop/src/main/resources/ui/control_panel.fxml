@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:id="rootPane" style="-fx-background-color: #071426;">
+
+    <!-- Header -->
+    <top>
+        <VBox spacing="10">
+            <padding>
+                <Insets top="20" right="20" bottom="10" left="20"/>
+            </padding>
+            <HBox alignment="CENTER_LEFT" spacing="15">
+                <Label text="CONTROL PANEL" styleClass="title-text" style="-fx-font-size: 28px;"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="modeIndicator" text="MANUAL MODE" style="-fx-text-fill: #ff9d00; -fx-font-weight: bold; -fx-font-size: 14px;"/>
+                <Label text="|" style="-fx-text-fill: #1a3a5c;"/>
+                <Label fx:id="userLabel" text="Operator" styleClass="label-text"/>
+            </HBox>
+        </VBox>
+    </top>
+
+    <!-- Center Content -->
+    <center>
+        <ScrollPane fitToWidth="true" fitToHeight="true"
+                    style="-fx-background-color: transparent; -fx-border-color: transparent;">
+            <VBox spacing="20">
+                <padding>
+                    <Insets top="10" right="20" bottom="20" left="20"/>
+                </padding>
+
+                <!-- Mode Selector + Equipment Controls -->
+                <HBox spacing="20">
+                    <!-- Left Column: Equipment Controls -->
+                    <VBox spacing="15" styleClass="card" HBox.hgrow="ALWAYS">
+                        <padding>
+                            <Insets top="20" right="20" bottom="20" left="20"/>
+                        </padding>
+                        <Label text="EQUIPMENT CONTROLS" styleClass="subtitle-text"/>
+
+                        <!-- Mode Selector -->
+                        <HBox spacing="10" alignment="CENTER_LEFT">
+                            <Label text="Control Mode:" styleClass="label-text"/>
+                            <ToggleButton fx:id="manualModeBtn" text="Manual" selected="true" styleClass="button-sidebar"/>
+                            <ToggleButton fx:id="autoModeBtn" text="Auto" styleClass="button-sidebar"/>
+                        </HBox>
+
+                        <Separator/>
+
+                        <!-- Pump 1 Control -->
+                        <VBox spacing="8" style="-fx-background-color: #0d2038; -fx-background-radius: 8; -fx-border-color: #1a3a5c; -fx-border-radius: 8; -fx-padding: 15;">
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <Label text="PUMP 1" style="-fx-text-fill: #00d4ff; -fx-font-weight: bold; -fx-font-size: 14px;"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="pump1Feedback" text="STOPPED" style="-fx-text-fill: #ff3333; -fx-font-weight: bold;"/>
+                            </HBox>
+                            <HBox spacing="10">
+                                <Button fx:id="pump1StartBtn" text="START" styleClass="button-primary" prefWidth="100"/>
+                                <Button fx:id="pump1StopBtn" text="STOP" styleClass="button-danger" prefWidth="100"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- Pump 2 Control -->
+                        <VBox spacing="8" style="-fx-background-color: #0d2038; -fx-background-radius: 8; -fx-border-color: #1a3a5c; -fx-border-radius: 8; -fx-padding: 15;">
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <Label text="PUMP 2" style="-fx-text-fill: #00d4ff; -fx-font-weight: bold; -fx-font-size: 14px;"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="pump2Feedback" text="STOPPED" style="-fx-text-fill: #ff3333; -fx-font-weight: bold;"/>
+                            </HBox>
+                            <HBox spacing="10">
+                                <Button fx:id="pump2StartBtn" text="START" styleClass="button-primary" prefWidth="100"/>
+                                <Button fx:id="pump2StopBtn" text="STOP" styleClass="button-danger" prefWidth="100"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- Inlet Valve Control -->
+                        <VBox spacing="8" style="-fx-background-color: #0d2038; -fx-background-radius: 8; -fx-border-color: #1a3a5c; -fx-border-radius: 8; -fx-padding: 15;">
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <Label text="INLET VALVE" style="-fx-text-fill: #00d4ff; -fx-font-weight: bold; -fx-font-size: 14px;"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="inletFeedback" text="CLOSED" style="-fx-text-fill: #ff3333; -fx-font-weight: bold;"/>
+                            </HBox>
+                            <HBox spacing="10">
+                                <Button fx:id="inletOpenBtn" text="OPEN" styleClass="button-primary" prefWidth="100"/>
+                                <Button fx:id="inletCloseBtn" text="CLOSE" styleClass="button-danger" prefWidth="100"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- Outlet Valve Control -->
+                        <VBox spacing="8" style="-fx-background-color: #0d2038; -fx-background-radius: 8; -fx-border-color: #1a3a5c; -fx-border-radius: 8; -fx-padding: 15;">
+                            <HBox alignment="CENTER_LEFT" spacing="10">
+                                <Label text="OUTLET VALVE" style="-fx-text-fill: #00d4ff; -fx-font-weight: bold; -fx-font-size: 14px;"/>
+                                <Region HBox.hgrow="ALWAYS"/>
+                                <Label fx:id="outletFeedback" text="CLOSED" style="-fx-text-fill: #ff3333; -fx-font-weight: bold;"/>
+                            </HBox>
+                            <HBox spacing="10">
+                                <Button fx:id="outletOpenBtn" text="OPEN" styleClass="button-primary" prefWidth="100"/>
+                                <Button fx:id="outletCloseBtn" text="CLOSE" styleClass="button-danger" prefWidth="100"/>
+                            </HBox>
+                        </VBox>
+
+                        <!-- Emergency Stop -->
+                        <Separator/>
+                        <Button fx:id="emergencyStopBtn" text="EMERGENCY STOP" styleClass="button-danger" maxWidth="Infinity" prefHeight="50"
+                                style="-fx-font-size: 16px; -fx-font-weight: bold;"/>
+                    </VBox>
+
+                    <!-- Right Column: Setpoint Table -->
+                    <VBox spacing="15" styleClass="card" HBox.hgrow="ALWAYS">
+                        <padding>
+                            <Insets top="20" right="20" bottom="20" left="20"/>
+                        </padding>
+                        <Label text="SETPOINT MANAGEMENT" styleClass="subtitle-text"/>
+
+                        <!-- Flow Rate Setpoint -->
+                        <VBox spacing="8" style="-fx-background-color: #0d2038; -fx-background-radius: 8; -fx-border-color: #1a3a5c; -fx-border-radius: 8; -fx-padding: 15;">
+                            <Label text="Flow Rate Target (L/min)" style="-fx-text-fill: #00d4ff; -fx-font-weight: bold;"/>
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Slider fx:id="flowSlider" min="0" max="500" value="250" HBox.hgrow="ALWAYS"/>
+                                <TextField fx:id="flowValueField" text="250" prefWidth="70" styleClass="text-field-dark"/>
+                                <Button fx:id="flowSetBtn" text="SET" styleClass="button-primary" prefWidth="60"/>
+                            </HBox>
+                            <Label fx:id="flowCurrentLabel" text="Current: 0.0 L/min" styleClass="label-text" style="-fx-font-size: 11px;"/>
+                        </VBox>
+
+                        <!-- Pressure Setpoint -->
+                        <VBox spacing="8" style="-fx-background-color: #0d2038; -fx-background-radius: 8; -fx-border-color: #1a3a5c; -fx-border-radius: 8; -fx-padding: 15;">
+                            <Label text="Pressure Target (bar)" style="-fx-text-fill: #00d4ff; -fx-font-weight: bold;"/>
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Slider fx:id="pressureSlider" min="0" max="10" value="4" blockIncrement="0.1" HBox.hgrow="ALWAYS"/>
+                                <TextField fx:id="pressureValueField" text="4.0" prefWidth="70" styleClass="text-field-dark"/>
+                                <Button fx:id="pressureSetBtn" text="SET" styleClass="button-primary" prefWidth="60"/>
+                            </HBox>
+                            <Label fx:id="pressureCurrentLabel" text="Current: 0.0 bar" styleClass="label-text" style="-fx-font-size: 11px;"/>
+                        </VBox>
+
+                        <!-- Temperature Setpoint -->
+                        <VBox spacing="8" style="-fx-background-color: #0d2038; -fx-background-radius: 8; -fx-border-color: #1a3a5c; -fx-border-radius: 8; -fx-padding: 15;">
+                            <Label text="Temperature Target (°C)" style="-fx-text-fill: #00d4ff; -fx-font-weight: bold;"/>
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Slider fx:id="tempSlider" min="0" max="100" value="65" HBox.hgrow="ALWAYS"/>
+                                <TextField fx:id="tempValueField" text="65" prefWidth="70" styleClass="text-field-dark"/>
+                                <Button fx:id="tempSetBtn" text="SET" styleClass="button-primary" prefWidth="60"/>
+                            </HBox>
+                            <Label fx:id="tempCurrentLabel" text="Current: 0.0 °C" styleClass="label-text" style="-fx-font-size: 11px;"/>
+                        </VBox>
+
+                        <!-- Tank Level Setpoint -->
+                        <VBox spacing="8" style="-fx-background-color: #0d2038; -fx-background-radius: 8; -fx-border-color: #1a3a5c; -fx-border-radius: 8; -fx-padding: 15;">
+                            <Label text="Tank A Level Target (%)" style="-fx-text-fill: #00d4ff; -fx-font-weight: bold;"/>
+                            <HBox spacing="10" alignment="CENTER_LEFT">
+                                <Slider fx:id="levelSlider" min="0" max="100" value="80" HBox.hgrow="ALWAYS"/>
+                                <TextField fx:id="levelValueField" text="80" prefWidth="70" styleClass="text-field-dark"/>
+                                <Button fx:id="levelSetBtn" text="SET" styleClass="button-primary" prefWidth="60"/>
+                            </HBox>
+                            <Label fx:id="levelCurrentLabel" text="Current: 0.0 %" styleClass="label-text" style="-fx-font-size: 11px;"/>
+                        </VBox>
+
+                        <Separator/>
+
+                        <!-- Command Log -->
+                        <Label text="RECENT COMMANDS" styleClass="subtitle-text" style="-fx-font-size: 13px;"/>
+                        <VBox fx:id="commandLogBox" spacing="4" maxHeight="150" style="-fx-background-color: #0a1525; -fx-background-radius: 6; -fx-padding: 10;">
+                            <Label text="No commands yet" style="-fx-text-fill: #8fa3bd; -fx-font-size: 11px;"/>
+                        </VBox>
+                    </VBox>
+                </HBox>
+            </VBox>
+        </ScrollPane>
+    </center>
+
+</BorderPane>

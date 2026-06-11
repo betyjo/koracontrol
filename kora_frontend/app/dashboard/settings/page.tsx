@@ -51,7 +51,7 @@ export default function SettingsPage() {
         try {
             await api.patch('profile/', profile);
             showToast('Profile updated successfully!', 'success');
-        } catch (err: any) {
+        } catch (err: unknown) {
             showToast('Failed to update profile.', 'error');
         } finally {
             setLoading(false);
@@ -72,8 +72,12 @@ export default function SettingsPage() {
             });
             showToast('Password changed successfully!', 'success');
             setPasswords({ old_password: '', new_password: '', confirm_password: '' });
-        } catch (err: any) {
-            const errorMsg = err.response?.data?.old_password?.[0] || 'Failed to change password.';
+        } catch (err: unknown) {
+            const errorMsg = (err as {
+                response?: {
+                    data?: { old_password?: string[] };
+                };
+            })?.response?.data?.old_password?.[0] || 'Failed to change password.';
             showToast(errorMsg, 'error');
         } finally {
             setLoading(false);

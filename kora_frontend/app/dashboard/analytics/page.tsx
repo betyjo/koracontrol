@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Loader2, Sparkles, AlertTriangle, CheckCircle } from "lucide-react";
+import { Loader2, Sparkles, AlertTriangle, CheckCircle, RefreshCw } from "lucide-react";
 import api from "@/lib/api";
 import { PageTransition } from "@/components/PageTransition";
 
@@ -22,26 +22,36 @@ function AnalyticsContent() {
   const [rows, setRows] = useState<AIAnalysisRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const res = await api.get<AIAnalysisRow[]>("ai/analyses/");
+      setRows(res.data);
+    } catch {
+      setError("Could not load AI analytics. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const res = await api.get<AIAnalysisRow[]>("ai/analyses/");
-        if (!cancelled) setRows(res.data);
-      } catch {
-        if (!cancelled) setError("Could not load AI analytics. Try again.");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
     load();
+    
+    // Set up automatic polling for real-time updates (every 30 seconds)
+    let intervalId: NodeJS.Timeout | null = null;
+    if (autoRefresh) {
+      intervalId = setInterval(() => {
+        load();
+      }, 30000);
+    }
+    
     return () => {
-      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
     };
-  }, []);
+  }, [autoRefresh]);
 
   useEffect(() => {
     if (!highlightId || loading) return;
@@ -66,7 +76,7 @@ function AnalyticsContent() {
     return () => window.clearTimeout(timer);
   }, [highlightId, loading, rows]);
 
-  if (loading) {
+  if (loading && rows.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 p-6">
         <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
@@ -78,19 +88,29 @@ function AnalyticsContent() {
     <PageTransition>
       <div className="p-6 max-w-6xl mx-auto">
         <header className="mb-8">
-          <div className="flex items-start gap-3">
-            <div className="p-2.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl transition-colors">
-              <Sparkles className="text-indigo-600 dark:text-indigo-400" size={28} />
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl transition-colors">
+                <Sparkles className="text-indigo-600 dark:text-indigo-400" size={28} />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
+                  AI analytics
+                </h1>
+                <p className="text-slate-500 dark:text-slate-400 mt-1">
+                  Automated anomaly snapshots from monitored tags — matches the AI
+                  analysis records behind the Django admin screens.
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
-                AI analytics
-              </h1>
-              <p className="text-slate-500 dark:text-slate-400 mt-1">
-                Automated anomaly snapshots from monitored tags — matches the AI
-                analysis records behind the Django admin screens.
-              </p>
-            </div>
+            <button
+              onClick={load}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors"
+              disabled={loading}
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
           </div>
         </header>
 
@@ -99,6 +119,18 @@ function AnalyticsContent() {
             {error}
           </div>
         )}
+
+        <div className="mb-4 flex items-center gap-2">
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+            <input
+              type="checkbox"
+              checked={autoRefresh}
+              onChange={(e) => setAutoRefresh(e.target.checked)}
+              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            Auto-refresh (30s)
+          </label>
+        </div>
 
         {rows.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-16 text-center text-slate-500 dark:text-slate-400">

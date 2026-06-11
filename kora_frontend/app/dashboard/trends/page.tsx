@@ -1,37 +1,59 @@
 "use client";
 import { useEffect, useState, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, ComposedChart, Area } from 'recharts';
-import { Download, Plus, Minus, RotateCcw, Calendar, Tag, ChevronLeft, ChevronRight, MessageSquarePlus } from 'lucide-react';
+import { Download, Plus, Minus, RotateCcw, Calendar, Tag, ChevronLeft, ChevronRight, MessageSquarePlus, AlertTriangle, Brain, Loader2 } from 'lucide-react';
 import { PageTransition } from '@/components/PageTransition';
-import api from '@/lib/api';
+import api, { alarmApi, aiInsightsApi, type AlarmEvent as AlarmEventType, type AITrendAbnormalityResult } from '@/lib/api';
 import { toPng } from 'html-to-image';
 
 interface TrendData {
   timestamp: string;
-  [key: string]: any;
+  [key: string]: number | string | undefined;
 }
 
-interface SelectedTag {
+interface TagInfo {
   id: number;
   name: string;
+}
+
+interface SelectedTag extends TagInfo {
   color: string;
 }
+
+interface Annotation {
+  label: string;
+  notes?: string;
+  at: string;
+}
+
+interface AnnotationInput {
+  label: string;
+  notes: string;
+  at: string;
+}
+
+type SeriesPoint = { t: string; v: number };
 
 const COLORS = ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'];
 
 export default function TrendsPage() {
   const [data, setData] = useState<TrendData[]>([]);
   const [compareData, setCompareData] = useState<TrendData[]>([]);
-  const [allTags, setAllTags] = useState<any[]>([]);
+  const [allTags, setAllTags] = useState<TagInfo[]>([]);
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>([]);
   const [startTime, setStartTime] = useState<string>(new Date(Date.now() - 24 * 3600 * 1000).toISOString().slice(0, 16));
   const [endTime, setEndTime] = useState<string>(new Date().toISOString().slice(0, 16));
   const [loading, setLoading] = useState(false);
   const [compareMode, setCompareMode] = useState(false);
-  const [annotations, setAnnotations] = useState<any[]>([]);
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [showAnnotationForm, setShowAnnotationForm] = useState(false);
-  const [newAnnotation, setNewAnnotation] = useState({ label: '', notes: '', at: '' });
+  const [newAnnotation, setNewAnnotation] = useState<AnnotationInput>({ label: '', notes: '', at: '' });
+  const [alarmOverlay, setAlarmOverlay] = useState(false);
+  const [alarmEvents, setAlarmEvents] = useState<AlarmEventType[]>([]);
   const chartRef = useRef<HTMLDivElement>(null);
+  const [aiAnalysisResult, setAiAnalysisResult] = useState<AITrendAbnormalityResult | null>(null);
+  const [aiAnalysisLoading, setAiAnalysisLoading] = useState(false);
+  const [showAIPanel, setShowAIPanel] = useState(false);
 
   // Load available tags
   useEffect(() => {
@@ -56,22 +78,25 @@ export default function TrendsPage() {
     setLoading(true);
     try {
       // Primary Data
-      const queries = selectedTags.map(tag =>
-        api.get(`/trends/query/?tag_id=${tag.id}&start_time=${startTime}&end_time=${endTime}`)
-      );
-
-      const responses = await Promise.all(queries);
+      const tagIdsStr = selectedTags.map(t => t.id).join(',');
+      const res = await api.get(`/history/query/?tag_ids=${tagIdsStr}&start=${new Date(startTime).toISOString()}&end=${new Date(endTime).toISOString()}`);
       
-      const merged: { [key: string]: any } = {};
-      responses.forEach((res, idx) => {
-        const tagName = selectedTags[idx].name;
-        res.data.data.forEach((point: any) => {
-          if (!merged[point.timestamp]) {
-            merged[point.timestamp] = { timestamp: point.timestamp };
-          }
-          merged[point.timestamp][tagName] = point.value;
+      const merged: Record<string, TrendData> = {};
+      
+      if (res.data.series) {
+        Object.entries(res.data.series as Record<string, SeriesPoint[]>).forEach(([tagId, points]) => {
+          const tag = selectedTags.find(t => t.id === parseInt(tagId));
+          if (!tag) return;
+          const tagName = tag.name;
+          points.forEach((point) => {
+            const timestamp = point.t;
+            if (!merged[timestamp]) {
+              merged[timestamp] = { timestamp };
+            }
+            merged[timestamp][tagName] = point.v;
+          });
         });
-      });
+      }
 
       // Comparison Data
       if (compareMode) {
@@ -79,23 +104,23 @@ export default function TrendsPage() {
         const compStart = new Date(new Date(startTime).getTime() - duration).toISOString();
         const compEnd = new Date(new Date(endTime).getTime() - duration).toISOString();
 
-        const compQueries = selectedTags.map(tag =>
-          api.get(`/trends/query/?tag_id=${tag.id}&start_time=${compStart}&end_time=${compEnd}`)
-        );
-
-        const compResponses = await Promise.all(compQueries);
+        const compRes = await api.get(`/history/query/?tag_ids=${tagIdsStr}&start=${compStart}&end=${compEnd}`);
         
-        compResponses.forEach((res, idx) => {
-          const tagName = `${selectedTags[idx].name} (Prev)`;
-          res.data.data.forEach((point: any) => {
-            // Align by offset time
-            const alignedTime = new Date(new Date(point.timestamp).getTime() + duration).toISOString();
-            if (!merged[alignedTime]) {
-              merged[alignedTime] = { timestamp: alignedTime };
-            }
-            merged[alignedTime][tagName] = point.value;
+        if (compRes.data.series) {
+          Object.entries(compRes.data.series as Record<string, SeriesPoint[]>).forEach(([tagId, points]) => {
+            const tag = selectedTags.find(t => t.id === parseInt(tagId));
+            if (!tag) return;
+            const tagName = `${tag.name} (Prev)`;
+            points.forEach((point) => {
+              // Align by offset time
+              const alignedTime = new Date(new Date(point.t).getTime() + duration).toISOString();
+              if (!merged[alignedTime]) {
+                merged[alignedTime] = { timestamp: alignedTime };
+              }
+              merged[alignedTime][tagName] = point.v;
+            });
           });
-        });
+        }
       }
 
       const formattedData = Object.values(merged).sort((a, b) =>
@@ -106,7 +131,17 @@ export default function TrendsPage() {
 
       // Load annotations
       const annotRes = await api.get(`/trends/annotations/?tag_id=${selectedTags[0].id}`);
-      setAnnotations(annotRes.data || []);
+      setAnnotations((annotRes.data || []) as Annotation[]);
+
+      // Load alarm events for overlay
+      if (alarmOverlay) {
+        try {
+          const alarmRes = await alarmApi.listEvents({ tag_id: selectedTags[0].id });
+          setAlarmEvents(alarmRes.data || []);
+        } catch {
+          setAlarmEvents([]);
+        }
+      }
     } catch (err) {
       console.error('Failed to load trend data:', err);
     } finally {
@@ -114,7 +149,7 @@ export default function TrendsPage() {
     }
   };
 
-  const addTag = (tag: any) => {
+  const addTag = (tag: TagInfo) => {
     if (!selectedTags.find(t => t.id === tag.id)) {
       const color = COLORS[selectedTags.length % COLORS.length];
       setSelectedTags([...selectedTags, { id: tag.id, name: tag.name, color }]);
@@ -177,7 +212,7 @@ export default function TrendsPage() {
   const exportData = async (format: 'csv' | 'png') => {
     if (format === 'csv') {
       try {
-        const res = await api.get(`/history/export.csv/?tag_id=${selectedTags[0].id}&start_time=${startTime}&end_time=${endTime}`, {
+        const res = await api.get(`/history/export.csv/?tag_ids=${selectedTags[0].id}&start=${new Date(startTime).toISOString()}&end=${new Date(endTime).toISOString()}`, {
           responseType: 'blob',
         });
         const url = window.URL.createObjectURL(res.data);
@@ -412,6 +447,31 @@ export default function TrendsPage() {
                 >
                   <Download size={16} /> PNG
                 </button>
+                <button
+                  onClick={() => setAlarmOverlay(!alarmOverlay)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium ${alarmOverlay ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}
+                >
+                  <AlertTriangle size={16} /> Alarms
+                </button>
+                <button
+                  onClick={async () => {
+                    if (selectedTags.length === 0) return;
+                    setAiAnalysisLoading(true);
+                    setShowAIPanel(true);
+                    try {
+                      const res = await aiInsightsApi.getTrendAbnormality(selectedTags[0].id);
+                      setAiAnalysisResult(res.data);
+                    } catch {
+                      setAiAnalysisResult(null);
+                    } finally {
+                      setAiAnalysisLoading(false);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium"
+                >
+                  {aiAnalysisLoading ? <Loader2 size={16} className="animate-spin" /> : <Brain size={16} />}
+                  AI Analysis
+                </button>
               </div>
             </div>
 
@@ -466,11 +526,22 @@ export default function TrendsPage() {
                   ))}
                   {annotations.map((ann, idx) => (
                     <ReferenceLine
-                      key={idx}
+                      key={`ann-${idx}`}
                       x={ann.at}
                       stroke="#EF4444"
                       strokeDasharray="3 3"
                       label={{ value: ann.label, position: 'top', fill: '#EF4444', fontSize: 12 }}
+                    />
+                  ))}
+                  {/* Alarm overlay reference lines */}
+                  {alarmOverlay && alarmEvents.map((evt, idx) => (
+                    <ReferenceLine
+                      key={`alarm-${idx}`}
+                      x={evt.triggered_at}
+                      stroke={evt.severity === 'critical' ? '#DC2626' : evt.severity === 'high' ? '#F97316' : '#EAB308'}
+                      strokeDasharray="6 3"
+                      strokeWidth={2}
+                      label={{ value: `⚠ ${evt.rule_name || evt.message || 'Alarm'}`.slice(0, 30), position: 'insideTopRight', fill: '#DC2626', fontSize: 10 }}
                     />
                   ))}
                 </ComposedChart>
@@ -479,7 +550,38 @@ export default function TrendsPage() {
           </div>
         )}
 
-        {/* Statistics */}
+        {/* AI Analysis Side Panel */}
+        {showAIPanel && aiAnalysisResult && (
+          <div className="bg-purple-50 dark:bg-purple-900/10 border border-purple-200 dark:border-purple-800 rounded-xl p-6 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-purple-800 dark:text-purple-300 flex items-center gap-2">
+                <Brain size={20} /> AI Trend Analysis: {aiAnalysisResult.tag_name}
+              </h3>
+              <button onClick={() => setShowAIPanel(false)} className="text-purple-500 hover:text-purple-700 text-sm">Dismiss</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
+                <div className="text-sm text-slate-500">Status</div>
+                <div className={`text-lg font-bold ${aiAnalysisResult.is_abnormal ? 'text-red-600' : 'text-green-600'}`}>
+                  {aiAnalysisResult.is_abnormal ? 'ABNORMAL' : 'NORMAL'}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">Confidence: {(aiAnalysisResult.confidence * 100).toFixed(0)}%</div>
+              </div>
+              <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
+                <div className="text-sm text-slate-500">Z-Score</div>
+                <div className="text-lg font-bold font-mono">{aiAnalysisResult.z_score.toFixed(3)}</div>
+                <div className="text-xs text-slate-400 mt-1">Trend: {aiAnalysisResult.trend_direction}</div>
+              </div>
+              <div className="bg-white dark:bg-slate-800 rounded-lg p-4">
+                <div className="text-sm text-slate-500">Rate of Change</div>
+                <div className="text-lg font-bold font-mono">{aiAnalysisResult.rate_of_change.toFixed(4)}</div>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-3">{aiAnalysisResult.explanation}</p>
+          </div>
+        )}
+
+        {/* Statistics + Alarm Summary */}
         {data.length > 0 && selectedTags.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {selectedTags.map(tag => {
@@ -489,6 +591,7 @@ export default function TrendsPage() {
               const min = Math.min(...values);
               const max = Math.max(...values);
               const avg = values.reduce((a, b) => a + b, 0) / values.length;
+              const stdDev = Math.sqrt(values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length);
 
               return (
                 <div
@@ -501,10 +604,29 @@ export default function TrendsPage() {
                     <div>Min: <span className="font-mono">{min.toFixed(2)}</span></div>
                     <div>Max: <span className="font-mono">{max.toFixed(2)}</span></div>
                     <div>Avg: <span className="font-mono">{avg.toFixed(2)}</span></div>
+                    <div>StdDev: <span className="font-mono">{stdDev.toFixed(2)}</span></div>
+                    <div>Samples: <span className="font-mono">{values.length}</span></div>
                   </div>
                 </div>
               );
             })}
+            {/* Alarm summary panel */}
+            {alarmOverlay && alarmEvents.length > 0 && (
+              <div className="bg-white dark:bg-slate-800 rounded-lg border border-red-200 dark:border-red-800 p-4" style={{ borderTop: '4px solid #EF4444' }}>
+                <h3 className="font-bold mb-2 flex items-center gap-2">
+                  <AlertTriangle size={16} className="text-red-500" />
+                  Alarm Events ({alarmEvents.length})
+                </h3>
+                <div className="text-sm space-y-1 max-h-40 overflow-y-auto">
+                  {alarmEvents.slice(0, 10).map((evt) => (
+                    <div key={evt.id} className="flex items-center justify-between">
+                      <span className="text-red-600 dark:text-red-400 truncate max-w-[200px]">{evt.rule_name}</span>
+                      <span className="text-xs text-slate-500">{new Date(evt.triggered_at).toLocaleTimeString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

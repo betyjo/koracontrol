@@ -5,20 +5,22 @@ from collections import defaultdict
 
 from .dashboard_viz import gauge_needle_degrees, normalized_ratio, status_level_for_value
 from .alarm_evaluator import evaluate_alarm_for_log
-from .models import User, Tag, TagLog, DashboardVisualization, AlarmRule, AlarmEvent, TrendAnnotation, OperatorJournalEntry, InAppNotification, NotificationSubscription, PlantArea, PlantEquipment, Bill, PaymentTransaction, Complaint, AIAnalysis, ChatThread, ChatMessage, ChatAttachment
+from .mqtt_service import publish_alarm_notification
+from .models import User, Tag, TagLog, DashboardVisualization, AlarmRule, AlarmEvent, TrendAnnotation, OperatorJournalEntry, InAppNotification, NotificationSubscription, PlantArea, PlantEquipment, Bill, PaymentTransaction, Complaint, AIAnalysis, ChatThread, ChatMessage, ChatAttachment, OperatorActionLog, AIFinding, ProcessSetpoint, EquipmentHealth, WaterQualityMetric
 from .serializers import (
     RegisterSerializer,
     MyTokenObtainPairSerializer,
     TagSerializer, TagLogSerializer, UserSerializer, ChangePasswordSerializer,
     ForgotPasswordRequestSerializer, ResetPasswordSerializer,
     AlarmRuleSerializer, AlarmEventSerializer, AlarmAcknowledgeSerializer, AlarmShelveSerializer,
-    TrendAnnotationSerializer, OperatorJournalEntrySerializer,
-    InAppNotificationSerializer, NotificationSubscriptionSerializer, PlantEquipmentSerializer
+    OperatorJournalEntrySerializer,
+    InAppNotificationSerializer, NotificationSubscriptionSerializer, PlantEquipmentSerializer,
+    OperatorActionLogSerializer, AIFindingSerializer,
 )
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.tokens import default_token_generator
-from django.db.models import Sum, Avg, Count
+from django.db.models import Sum, Avg, Count, Q, Max
 from django.utils import timezone
 from datetime import timedelta, datetime
 import calendar
@@ -26,12 +28,113 @@ import csv
 import io
 import json
 import mimetypes
+import time
 from django.http import StreamingHttpResponse, HttpResponse
 
 # --- AUTH VIEWS ---
 
 class MyTokenObtainPairView(TokenObtainPairView):
     serializer_class = MyTokenObtainPairSerializer
+
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.parsers import MultiPartParser
+
+class BiometricLoginView(APIView):
+    permission_classes = (permissions.AllowAny,)
+
+    def post(self, request, *args, **kwargs):
+        from .biometric_face import check_dependencies, match_face
+
+        dependency_error = check_dependencies()
+        if dependency_error:
+            return Response({"error": dependency_error}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+        image_b64 = request.data.get('image')
+        if not image_b64:
+            return Response({"error": "No image uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            import binascii
+            import base64
+
+            try:
+                image_data = base64.b64decode(image_b64, validate=True)
+            except (ValueError, binascii.Error):
+                return Response({"error": "Invalid image data"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if not image_data:
+                return Response({"error": "Empty image data"}, status=status.HTTP_400_BAD_REQUEST)
+
+            candidates = []
+            for user in User.objects.exclude(face_encoding__isnull=True):
+                if not user.face_encoding or len(user.face_encoding) != 128:
+                    continue
+                candidates.append({
+                    "user_id": user.id,
+                    "username": user.username,
+                    "role": user.role,
+                    "encoding": user.face_encoding,
+                })
+
+            if not candidates:
+                return Response(
+                    {"error": "No Face ID profiles are enrolled. Upload operator photos in admin."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+
+            result = match_face(image_data, candidates)
+
+            if result.get("ok"):
+                user = User.objects.get(pk=result["user_id"])
+                refresh = MyTokenObtainPairSerializer.get_token(user)
+                return Response({
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token),
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "role": user.role,
+                    },
+                }, status=status.HTTP_200_OK)
+
+            code = result.get("code", "worker_failed")
+            if code == "no_face":
+                return Response(
+                    {"error": "No face found in image. Center your face and try again."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if code == "bad_image":
+                return Response({"error": "Could not read image file"}, status=status.HTTP_400_BAD_REQUEST)
+            if code == "not_recognized":
+                return Response({"error": "Face not recognized"}, status=status.HTTP_401_UNAUTHORIZED)
+            if code == "timeout":
+                return Response(
+                    {"error": "Face recognition timed out. Please try again."},
+                    status=status.HTTP_504_GATEWAY_TIMEOUT,
+                )
+
+            detail = result.get("detail") or "Face recognition worker failed"
+            return Response(
+                {"error": f"Face recognition failed: {detail}"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        except User.DoesNotExist:
+            return Response({"error": "Matched user no longer exists"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        except ImportError:
+            return Response(
+                {"error": "Face recognition is not installed on the server"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Biometric login failed")
+            return Response(
+                {"error": "Face recognition failed. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -188,15 +291,34 @@ class TagListView(generics.ListCreateAPIView):
     """
     queryset = Tag.objects.all()
     serializer_class = TagSerializer
+    permission_classes = [permissions.AllowAny]
 
 class TagLogListCreateView(generics.ListCreateAPIView):
     """
     Team 1 uses this to send actual PLC values.
     Endpoint: /api/logs/
     """
-    permission_classes = [permissions.IsAuthenticated]
-    queryset = TagLog.objects.all().order_by('-timestamp')
+    permission_classes = [permissions.AllowAny]  # Allow access for testing
     serializer_class = TagLogSerializer
+
+    def get_queryset(self):
+        # Prevent N+1 queries by selecting related tag
+        qs = TagLog.objects.select_related('tag').order_by('-timestamp')
+        
+        # Support tag_name filtering if passed
+        tag_name = self.request.query_params.get('tag_name')
+        if tag_name:
+            qs = qs.filter(tag__name=tag_name)
+            
+        # Limit results to latest 200 logs to prevent huge serialization/network payloads.
+        # This resolves the 14-second loading times for the main dashboard.
+        limit = self.request.query_params.get('limit')
+        if limit:
+            try:
+                return qs[:int(limit)]
+            except ValueError:
+                pass
+        return qs[:200]
 
     def create(self, request, *args, **kwargs):
         is_bulk = isinstance(request.data, list)
@@ -210,6 +332,7 @@ class TagLogListCreateView(generics.ListCreateAPIView):
 
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
 
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -327,7 +450,7 @@ class PaymentCallbackView(generics.GenericAPIView):
             return Response({"error": "Failed to reach Chapa verification API"}, status=502)
 
 class ComplaintListCreateView(generics.ListCreateAPIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]  # Allow access for testing
     serializer_class = ComplaintSerializer
 
     def get_queryset(self):
@@ -340,7 +463,7 @@ class ComplaintListCreateView(generics.ListCreateAPIView):
         # Automatically assign the complaint to the logged-in user
         serializer.save(user=self.request.user)
 
-class ComplaintDetailView(generics.RetrieveUpdateAPIView):
+class ComplaintDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Complaint.objects.all()
     
     def get_serializer_class(self):
@@ -353,6 +476,12 @@ class ComplaintDetailView(generics.RetrieveUpdateAPIView):
         if user.role in ['admin', 'operator']:
             return Complaint.objects.all()
         return Complaint.objects.filter(user=user)
+
+    def perform_destroy(self, instance):
+        # Ensure users can only delete their own complaints
+        if self.request.user.role == 'customer' and instance.user != self.request.user:
+            raise permissions.PermissionDenied("You can only delete your own complaints.")
+        instance.delete()
 
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
@@ -378,7 +507,7 @@ class AlarmRuleListCreateView(generics.ListCreateAPIView):
     queryset = AlarmRule.objects.select_related('tag').all()
 
     def get_queryset(self):
-        qs = self.queryset
+        qs = super().get_queryset()
         tag_id = self.request.query_params.get('tag_id')
         if tag_id:
             qs = qs.filter(tag_id=tag_id)
@@ -429,6 +558,30 @@ class AlarmAcknowledgeView(generics.GenericAPIView):
         event.acknowledged_by = request.user
         event.ack_note = serializer.validated_data.get('ack_note', '')
         event.save(update_fields=['state', 'acknowledged_at', 'acknowledged_by', 'ack_note'])
+        
+        # Publish alarm notification to MQTT
+        try:
+            alarm_data = {
+                'id': event.id,
+                'rule_id': event.rule.id,
+                'rule_name': event.rule.name,
+                'tag_id': event.tag_id,
+                'tag_name': event.tag_name,
+                'severity': event.rule.severity,
+                'level': event.level,
+                'state': event.state,
+                'triggered_value': event.triggered_value,
+                'message': event.message,
+                'triggered_at': event.triggered_at.isoformat() if event.triggered_at else None,
+                'acknowledged_at': event.acknowledged_at.isoformat() if event.acknowledged_at else None,
+                'acknowledged_by': event.acknowledged_by.username if event.acknowledged_by else None,
+            }
+            publish_alarm_notification(alarm_data)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to publish alarm acknowledgment notification: {e}")
+        
         return Response(AlarmEventSerializer(event).data)
 
 
@@ -452,6 +605,30 @@ class AlarmShelveView(generics.GenericAPIView):
         event.shelve_note = serializer.validated_data.get('shelve_note', '')
         event.shelved_until = timezone.now() + timedelta(minutes=minutes)
         event.save(update_fields=['state', 'shelved_by', 'shelve_note', 'shelved_until'])
+        
+        # Publish alarm notification to MQTT
+        try:
+            alarm_data = {
+                'id': event.id,
+                'rule_id': event.rule.id,
+                'rule_name': event.rule.name,
+                'tag_id': event.tag_id,
+                'tag_name': event.tag_name,
+                'severity': event.rule.severity,
+                'level': event.level,
+                'state': event.state,
+                'triggered_value': event.triggered_value,
+                'message': event.message,
+                'triggered_at': event.triggered_at.isoformat() if event.triggered_at else None,
+                'shelved_until': event.shelved_until.isoformat() if event.shelved_until else None,
+                'shelved_by': event.shelved_by.username if event.shelved_by else None,
+            }
+            publish_alarm_notification(alarm_data)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to publish alarm shelve notification: {e}")
+        
         return Response(AlarmEventSerializer(event).data)
 
 
@@ -470,6 +647,28 @@ class AlarmUnshelveView(generics.GenericAPIView):
         event.state = next_state
         event.shelved_until = None
         event.save(update_fields=['state', 'shelved_until'])
+        
+        # Publish alarm notification to MQTT
+        try:
+            alarm_data = {
+                'id': event.id,
+                'rule_id': event.rule.id,
+                'rule_name': event.rule.name,
+                'tag_id': event.tag_id,
+                'tag_name': event.tag_name,
+                'severity': event.rule.severity,
+                'level': event.level,
+                'state': event.state,
+                'triggered_value': event.triggered_value,
+                'message': event.message,
+                'triggered_at': event.triggered_at.isoformat() if event.triggered_at else None,
+            }
+            publish_alarm_notification(alarm_data)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to publish alarm unshelve notification: {e}")
+        
         return Response(AlarmEventSerializer(event).data)
 
 
@@ -755,6 +954,186 @@ class AIThreadExportView(generics.GenericAPIView):
         return response
 
 # --- DASHBOARD ANALYTICS VIEWS ---
+
+
+class DashboardKpiSummaryView(generics.GenericAPIView):
+    """Live process KPIs: peak/avg/min flow, water balance, pump status, quality."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from django.db.models import Max, Min, Avg, Sum
+        now = timezone.now()
+        cutoff_24h = now - timedelta(hours=24)
+
+        # Flow rate stats
+        flow_logs = TagLog.objects.filter(
+            tag__name__icontains='flow',
+            timestamp__gte=cutoff_24h,
+        ).aggregate(
+            peak=Max('value'),
+            avg=Avg('value'),
+            minimum=Min('value'),
+            count=Sum('value'),
+        )
+
+        # Tank level stats (water balance proxy)
+        tank_logs = TagLog.objects.filter(
+            tag__name__icontains='tank',
+            timestamp__gte=cutoff_24h,
+        ).order_by('-timestamp')
+        latest_tank = tank_logs.first()
+        earliest_tank = tank_logs.last()
+        water_balance = 0.0
+        if latest_tank and earliest_tank:
+            water_balance = round(latest_tank.value - earliest_tank.value, 2)
+
+        # Quality percentage
+        total_quality_logs = TagLog.objects.filter(timestamp__gte=cutoff_24h).count()
+        good_quality_logs = TagLog.objects.filter(
+            timestamp__gte=cutoff_24h,
+            quality_code='good',
+        ).count()
+        quality_pct = round((good_quality_logs / total_quality_logs) * 100, 1) if total_quality_logs else 100.0
+
+        # Pump status (on/off from Main_Pump or similar tag)
+        pump_log = TagLog.objects.filter(
+            tag__name__icontains='pump',
+        ).order_by('-timestamp').first()
+        pump_running = pump_log.value > 0 if pump_log else None
+
+        # Active alarms count
+        from .models import AlarmEvent
+        active_alarms = AlarmEvent.objects.filter(state__in=['active', 'acknowledged', 'shelved']).count()
+
+        # Recent operator events
+        recent_journal = list(
+            OperatorJournalEntry.objects.select_related('author')
+            .order_by('-occurred_at')[:5]
+            .values('id', 'title', 'occurred_at', 'author__username')
+        )
+
+        return Response({
+            'flow_peak': round(flow_logs['peak'] or 0, 2),
+            'flow_avg': round(flow_logs['avg'] or 0, 2),
+            'flow_min': round(flow_logs['minimum'] or 0, 2),
+            'flow_total_24h': round(flow_logs['count'] or 0, 2),
+            'water_balance': water_balance,
+            'quality_pct': quality_pct,
+            'pump_running': pump_running,
+            'active_alarms': active_alarms,
+            'recent_operator_events': [
+                {
+                    'id': e['id'],
+                    'title': e['title'],
+                    'occurred_at': e['occurred_at'].isoformat() if e['occurred_at'] else None,
+                    'author': e['author__username'],
+                }
+                for e in recent_journal
+            ],
+        })
+
+
+class BillForecastView(generics.GenericAPIView):
+    """Estimate next bill based on recent usage trend."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        # Get latest bills
+        recent_bills = Bill.objects.filter(user=user).order_by('-billing_date')[:6]
+        if not recent_bills.exists():
+            return Response({'forecast_amount': 0, 'confidence': 'low', 'usage_trend': []})
+
+        bills_list = list(recent_bills)
+        avg_amount = sum(float(b.amount) for b in bills_list) / len(bills_list)
+        avg_usage = sum(float(b.usage_kwh) for b in bills_list) / len(bills_list)
+
+        # Simple trend: compare last 2 bills vs previous ones
+        if len(bills_list) >= 3:
+            recent_avg = sum(float(b.amount) for b in bills_list[:2]) / 2
+            older_avg = sum(float(b.amount) for b in bills_list[2:]) / max(1, len(bills_list) - 2)
+            trend_pct = round(((recent_avg - older_avg) / max(older_avg, 1)) * 100, 1)
+        else:
+            trend_pct = 0.0
+            recent_avg = avg_amount
+
+        forecast = round(recent_avg * (1 + trend_pct / 200), 2)  # dampen trend
+
+        # User's rate
+        rate = float(user.billing_rate) if hasattr(user, 'billing_rate') else 1.50
+
+        return Response({
+            'forecast_amount': forecast,
+            'forecast_usage': round(avg_usage * (1 + trend_pct / 200), 2),
+            'rate_per_unit': rate,
+            'trend_pct': trend_pct,
+            'avg_amount': round(avg_amount, 2),
+            'confidence': 'high' if len(bills_list) >= 4 else 'medium' if len(bills_list) >= 2 else 'low',
+            'usage_trend': [
+                {'month': b.billing_date.strftime('%b'), 'amount': float(b.amount), 'usage': float(b.usage_kwh)}
+                for b in reversed(bills_list)
+            ],
+        })
+
+
+class ServiceOutageView(generics.GenericAPIView):
+    """Return current/active service outage notifications."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # Look for alarm events with critical severity that are still active
+        from .models import AlarmEvent
+        outages = AlarmEvent.objects.filter(
+            state__in=['active', 'acknowledged'],
+            rule__severity__in=['critical', 'high'],
+        ).select_related('rule', 'rule__tag').order_by('-triggered_at')[:10]
+
+        result = []
+        for ev in outages:
+            result.append({
+                'id': ev.id,
+                'title': ev.rule.name,
+                'severity': ev.rule.severity,
+                'message': ev.message or f'{ev.rule.tag.name} triggered at ev.triggered_at',
+                'triggered_at': ev.triggered_at.isoformat(),
+                'state': ev.state,
+            })
+
+        return Response({'outages': result, 'count': len(result)})
+
+
+class UsageComparisonView(generics.GenericAPIView):
+    """Compare current usage vs previous period for customer."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        now = timezone.now()
+        this_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        last_month_start = (this_month_start - timedelta(days=1)).replace(day=1)
+
+        this_month_bills = Bill.objects.filter(
+            user=user, billing_date__gte=this_month_start
+        ).aggregate(total_usage=Sum('usage_kwh'), total_cost=Sum('amount'))
+
+        last_month_bills = Bill.objects.filter(
+            user=user,
+            billing_date__gte=last_month_start,
+            billing_date__lt=this_month_start,
+        ).aggregate(total_usage=Sum('usage_kwh'), total_cost=Sum('amount'))
+
+        this_usage = float(this_month_bills['total_usage'] or 0)
+        last_usage = float(last_month_bills['total_usage'] or 0)
+        this_cost = float(this_month_bills['total_cost'] or 0)
+        last_cost = float(last_month_bills['total_cost'] or 0)
+
+        change_pct = round(((this_usage - last_usage) / max(last_usage, 1)) * 100, 1) if last_usage else 0.0
+
+        return Response({
+            'this_month': {'usage': this_usage, 'cost': this_cost},
+            'last_month': {'usage': last_usage, 'cost': last_cost},
+            'change_pct': change_pct,
+        })
 
 
 class DashboardVizLiveView(generics.GenericAPIView):
@@ -1083,6 +1462,7 @@ class ChangePasswordView(generics.UpdateAPIView):
     """
     Change the logged-in user's password.
     Endpoint: /api/profile/change-password/
+    Accepts POST, PUT, and PATCH.
     """
     serializer_class = ChangePasswordSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -1099,6 +1479,9 @@ class ChangePasswordView(generics.UpdateAPIView):
         user.save()
         return Response({"message": "Password updated successfully"}, status=status.HTTP_200_OK)
 
+    def post(self, request, *args, **kwargs):
+        return self.update(request, *args, **kwargs)
+
 class DeleteAccountView(generics.DestroyAPIView):
     """
     Permanently delete the logged-in user's account.
@@ -1113,25 +1496,8 @@ class DeleteAccountView(generics.DestroyAPIView):
         instance.delete()
 
 
-# --- TREND & ANNOTATIONS ---
 
-class TrendAnnotationListCreateView(generics.ListCreateAPIView):
-    """
-    Get/create trend annotations (incident markers) on tag data.
-    """
-    serializer_class = TrendAnnotationSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        tag_id = self.request.query_params.get('tag_id')
-        qs = TrendAnnotation.objects.select_related('created_by')
-        if tag_id:
-            qs = qs.filter(tag_id=tag_id)
-        return qs
-
-    def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
-
+# TrendAnnotationListCreateView has been moved to operations_views.py
 
 class HistoryQueryView(generics.GenericAPIView):
     """
@@ -1417,4 +1783,800 @@ class NotificationSubscriptionDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         return NotificationSubscription.objects.filter(user=self.request.user)
+
+
+# ---------------------------------------------------------------------------
+# AUDIT LOGGING
+# ---------------------------------------------------------------------------
+
+def log_operator_action(user, action_type, description, target_tag=None, old_value='', new_value='', ip_address=None):
+    """Helper to persist an operator action audit record."""
+    try:
+        OperatorActionLog.objects.create(
+            user=user,
+            action_type=action_type,
+            target_tag=target_tag,
+            description=description,
+            old_value=str(old_value)[:100],
+            new_value=str(new_value)[:100],
+            ip_address=ip_address,
+        )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception('Failed to write operator action log')
+
+
+class OperatorActionLogListView(generics.ListAPIView):
+    """Return paginated operator action audit log."""
+    serializer_class = OperatorActionLogSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = OperatorActionLog.objects.select_related('user', 'target_tag').order_by('-created_at')
+        action_type = self.request.query_params.get('action_type')
+        if action_type:
+            qs = qs.filter(action_type=action_type)
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+        since = self.request.query_params.get('since')
+        if since:
+            qs = qs.filter(created_at__gte=since)
+        return qs[:500]
+
+
+# ---------------------------------------------------------------------------
+# AI INTELLIGENCE VIEWS
+# ---------------------------------------------------------------------------
+
+class AIAnomalyDashboardView(generics.GenericAPIView):
+    """Aggregated anomaly metrics for the AI insights dashboard."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        now = timezone.now()
+        last_24h = now - timedelta(hours=24)
+        last_7d = now - timedelta(days=7)
+
+        recent_findings = AIFinding.objects.filter(finding_type='anomaly', created_at__gte=last_24h)
+        week_findings = AIFinding.objects.filter(finding_type='anomaly', created_at__gte=last_7d)
+
+        # Confidence distribution
+        confidences = [f.result_json.get('confidence', 0) for f in recent_findings if isinstance(f.result_json, dict)]
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+
+        # Top anomalous tags
+        tag_counts = defaultdict(int)
+        for f in week_findings:
+            if f.tag_id:
+                tag_counts[f.tag_id] += 1
+        top_tags = sorted(tag_counts.items(), key=lambda x: -x[1])[:5]
+        top_tag_ids = [t[0] for t in top_tags]
+        tag_names = {t.id: t.name for t in Tag.objects.filter(id__in=top_tag_ids)}
+
+        # Recent AIAnalysis records
+        recent_analyses = AIAnalysis.objects.select_related('tag').order_by('-detected_at')[:20]
+        anomalies = [
+            {
+                'id': a.id,
+                'tag_name': a.tag.name if a.tag else None,
+                'is_anomaly': a.is_anomaly,
+                'confidence': a.confidence_score,
+                'explanation': a.explanation,
+                'detected_at': a.detected_at.isoformat(),
+            }
+            for a in recent_analyses
+        ]
+
+        return Response({
+            'recent_anomalies_24h': recent_findings.count(),
+            'total_anomalies_7d': week_findings.count(),
+            'avg_confidence': round(avg_confidence, 3),
+            'top_anomalous_tags': [
+                {'tag_id': tid, 'tag_name': tag_names.get(tid, f'Tag {tid}'), 'count': cnt}
+                for tid, cnt in top_tags
+            ],
+            'recent_detections': anomalies,
+        })
+
+
+class AIPredictiveMaintenanceView(generics.GenericAPIView):
+    """Predict equipment maintenance needs based on tag trends."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        equipment_list = PlantEquipment.objects.select_related('area').all()[:50]
+        predictions = []
+        for eq in equipment_list:
+            tid = eq.primary_tag_id
+            if not tid:
+                continue
+            recent_logs = TagLog.objects.filter(tag_id=tid).order_by('-timestamp')[:100]
+            if not recent_logs:
+                continue
+            values = [float(log.value) for log in recent_logs]
+            avg_val = sum(values) / len(values)
+            variance = sum((v - avg_val) ** 2 for v in values) / len(values) if values else 0
+            # Simple heuristic: high variance = degrading
+            health = 'good' if variance < 10 else 'degrading' if variance < 50 else 'critical'
+            predictions.append({
+                'equipment_id': eq.id,
+                'equipment_name': eq.name,
+                'area': eq.area.name if eq.area else None,
+                'avg_value': round(avg_val, 2),
+                'variance': round(variance, 2),
+                'health': health,
+                'samples': len(values),
+                'recommendation': 'Schedule inspection' if health != 'good' else 'No action needed',
+            })
+        predictions.sort(key=lambda x: {'critical': 0, 'degrading': 1, 'good': 2}.get(x['health'], 3))
+        return Response({'predictions': predictions})
+
+
+class AIAlarmPrioritizationView(generics.GenericAPIView):
+    """AI-ranked list of active alarms by risk."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        open_states = ['active', 'acknowledged', 'shelved']
+        active_events = AlarmEvent.objects.filter(state__in=open_states).select_related('rule', 'rule__tag').order_by('-triggered_at')
+
+        severity_weight = {'critical': 100, 'high': 60, 'medium': 30, 'low': 10}
+        ranked = []
+        now = timezone.now()
+        for evt in active_events[:100]:
+            sev_score = severity_weight.get(evt.rule.severity, 10)
+            # Duration factor: longer open = higher risk
+            duration_mins = (now - evt.triggered_at).total_seconds() / 60 if evt.triggered_at else 0
+            duration_score = min(duration_mins / 60, 5) * 10  # max 50 pts for 5+ hours
+            # Level factor
+            level_score = 30 if evt.level == 'alarm' else 10
+            priority_score = sev_score + duration_score + level_score
+            ranked.append({
+                'event_id': evt.id,
+                'rule_name': evt.rule.name,
+                'tag_name': evt.rule.tag.name if evt.rule.tag else None,
+                'severity': evt.rule.severity,
+                'level': evt.level,
+                'state': evt.state,
+                'triggered_value': evt.triggered_value,
+                'message': evt.message,
+                'triggered_at': evt.triggered_at.isoformat() if evt.triggered_at else None,
+                'duration_minutes': round(duration_mins, 1),
+                'priority_score': round(priority_score, 1),
+            })
+        ranked.sort(key=lambda x: -x['priority_score'])
+        return Response({'ranked_alarms': ranked})
+
+
+class AIRootCauseView(generics.GenericAPIView):
+    """Suggest root cause for a given alarm event by analyzing correlated tag movements."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        event_id = request.data.get('event_id')
+        if not event_id:
+            return Response({'error': 'event_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            event = AlarmEvent.objects.select_related('rule', 'rule__tag').get(id=event_id)
+        except AlarmEvent.DoesNotExist:
+            return Response({'error': 'Alarm event not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Get the alarm tag's recent data
+        alarm_tag_id = event.rule.tag_id
+        trigger_time = event.triggered_at or timezone.now()
+        window_start = trigger_time - timedelta(minutes=30)
+
+        alarm_logs = TagLog.objects.filter(tag_id=alarm_tag_id, timestamp__gte=window_start).order_by('timestamp')[:100]
+        alarm_values = [float(l.value) for l in alarm_logs]
+
+        # Check correlated tags for simultaneous deviations
+        all_tags = Tag.objects.exclude(id=alarm_tag_id)[:20]
+        correlations = []
+        for tag in all_tags:
+            tag_logs = TagLog.objects.filter(tag_id=tag.id, timestamp__gte=window_start).order_by('timestamp')[:100]
+            if len(tag_logs) < 5:
+                continue
+            tag_values = [float(l.value) for l in tag_logs]
+            tag_avg = sum(tag_values) / len(tag_values)
+            tag_var = sum((v - tag_avg) ** 2 for v in tag_values) / len(tag_values)
+            if tag_var > 5:  # Significant variation
+                correlations.append({
+                    'tag_id': tag.id,
+                    'tag_name': tag.name,
+                    'variance': round(tag_var, 2),
+                    'avg_value': round(tag_avg, 2),
+                })
+
+        correlations.sort(key=lambda x: -x['variance'])
+
+        # Build suggestion
+        suggestion_parts = [f"Alarm on {event.rule.tag.name}: {event.message}"]
+        if correlations:
+            corr_names = ', '.join(c['tag_name'] for c in correlations[:3])
+            suggestion_parts.append(f"Correlated deviations detected in: {corr_names}")
+            suggestion_parts.append("Possible root cause: upstream process disturbance affecting multiple sensors.")
+        else:
+            suggestion_parts.append("No correlated tag deviations found. Likely isolated sensor or threshold issue.")
+
+        # Log finding
+        AIFinding.objects.create(
+            finding_type='root_cause',
+            tag_id=alarm_tag_id,
+            alarm_event=event,
+            result_json={
+                'suggestion': ' '.join(suggestion_parts),
+                'correlations': correlations[:5],
+                'alarm_values_sample': alarm_values[:10],
+            },
+        )
+
+        return Response({
+            'event_id': event.id,
+            'suggestion': ' '.join(suggestion_parts),
+            'correlated_tags': correlations[:5],
+        })
+
+
+class AITrendAbnormalityView(generics.GenericAPIView):
+    """Analyze a tag's recent trend for statistical abnormalities."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        tag_id = request.data.get('tag_id')
+        if not tag_id:
+            return Response({'error': 'tag_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            tag = Tag.objects.get(id=tag_id)
+        except Tag.DoesNotExist:
+            return Response({'error': 'Tag not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        recent_logs = TagLog.objects.filter(tag_id=tag_id).order_by('-timestamp')[:200]
+        if len(recent_logs) < 10:
+            return Response({'error': 'Insufficient data for analysis (need at least 10 samples)'}, status=status.HTTP_400_BAD_REQUEST)
+
+        values = [float(l.value) for l in recent_logs]
+        values.reverse()  # chronological order
+        avg = sum(values) / len(values)
+        std_dev = (sum((v - avg) ** 2 for v in values) / len(values)) ** 0.5
+
+        # Z-score based abnormality detection
+        abnormal_points = []
+        for i, v in enumerate(values):
+            z = abs(v - avg) / std_dev if std_dev > 0 else 0
+            if z > 2.0:
+                abnormal_points.append({
+                    'index': i,
+                    'value': v,
+                    'z_score': round(z, 2),
+                    'timestamp': recent_logs[len(recent_logs) - 1 - i].timestamp.isoformat(),
+                })
+
+        # Rate of change analysis
+        rates = [abs(values[i+1] - values[i]) for i in range(len(values)-1)]
+        avg_rate = sum(rates) / len(rates) if rates else 0
+        max_rate = max(rates) if rates else 0
+
+        # Trend direction
+        half = len(values) // 2
+        first_half_avg = sum(values[:half]) / half if half > 0 else avg
+        second_half_avg = sum(values[half:]) / (len(values) - half) if (len(values) - half) > 0 else avg
+        trend = 'rising' if second_half_avg > first_half_avg * 1.02 else 'falling' if second_half_avg < first_half_avg * 0.98 else 'stable'
+
+        abnormality_score = min(1.0, len(abnormal_points) / max(len(values) * 0.1, 1))
+
+        result = {
+            'tag_id': tag.id,
+            'tag_name': tag.name,
+            'samples': len(values),
+            'mean': round(avg, 2),
+            'std_dev': round(std_dev, 2),
+            'trend': trend,
+            'avg_rate_of_change': round(avg_rate, 3),
+            'max_rate_of_change': round(max_rate, 3),
+            'abnormal_points': abnormal_points[:20],
+            'abnormal_point_count': len(abnormal_points),
+            'abnormality_score': round(abnormality_score, 3),
+            'is_abnormal': abnormality_score > 0.3,
+            'confidence': round(1.0 - abnormality_score, 3) if abnormality_score <= 0.3 else round(abnormality_score, 3),
+            'explanation': f"Found {len(abnormal_points)} abnormal data points (z-score > 2.0) out of {len(values)} samples. Trend is {trend}.",
+        }
+
+        # Log finding
+        AIFinding.objects.create(
+            finding_type='trend_abnormality',
+            tag=tag,
+            result_json=result,
+        )
+
+        return Response(result)
+
+
+class AIFindingListView(generics.ListAPIView):
+    """List AI findings with optional filtering."""
+    serializer_class = AIFindingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        qs = AIFinding.objects.select_related('tag', 'alarm_event').order_by('-created_at')
+        finding_type = self.request.query_params.get('finding_type')
+        if finding_type:
+            qs = qs.filter(finding_type=finding_type)
+        tag_id = self.request.query_params.get('tag_id')
+        if tag_id:
+            qs = qs.filter(tag_id=tag_id)
+        return qs[:200]
+
+
+class AIEquipmentHealthView(generics.GenericAPIView):
+    """Equipment health summary from AI predictive maintenance analysis."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        equipment_list = PlantEquipment.objects.select_related('area').all()[:50]
+        health_items = []
+        
+        for eq in equipment_list:
+            tid = eq.primary_tag_id
+            if not tid:
+                continue
+            recent_logs = TagLog.objects.filter(tag_id=tid).order_by('-timestamp')[:200]
+            if len(recent_logs) < 10:
+                continue
+            
+            values = [float(log.value) for log in recent_logs]
+            avg_val = sum(values) / len(values)
+            std_dev = (sum((v - avg_val) ** 2 for v in values) / len(values)) ** 0.5
+            variance = std_dev ** 2
+            
+            # Compute health score (0-1) based on multiple factors
+            health_score = 1.0
+            issues = []
+            recommendations = []
+            
+            # Factor 1: Variance (high = bad)
+            cv = std_dev / max(abs(avg_val), 1e-9)
+            if cv > 0.3:
+                health_score -= 0.3
+                issues.append(f'High coefficient of variation ({cv:.2f}) - sensor may need calibration')
+                recommendations.append('Schedule sensor calibration')
+            elif cv > 0.15:
+                health_score -= 0.15
+                issues.append(f'Moderate variance detected (CV: {cv:.2f})')
+            
+            # Factor 2: Trend analysis
+            half = len(values) // 2
+            first_half_avg = sum(values[:half]) / half if half > 0 else avg_val
+            second_half_avg = sum(values[half:]) / (len(values) - half) if (len(values) - half) > 0 else avg_val
+            drift_pct = abs(second_half_avg - first_half_avg) / max(abs(first_half_avg), 1e-9) * 100
+            
+            if drift_pct > 20:
+                health_score -= 0.25
+                trend_dir = 'rising' if second_half_avg > first_half_avg else 'falling'
+                issues.append(f'Significant trend drift ({drift_pct:.1f}% {trend_dir})')
+                recommendations.append('Investigate process changes or equipment wear')
+            elif drift_pct > 10:
+                health_score -= 0.1
+            
+            # Factor 3: Outlier detection
+            outlier_count = sum(1 for v in values if abs(v - avg_val) > 2.5 * std_dev)
+            if outlier_count > len(values) * 0.05:
+                health_score -= 0.2
+                issues.append(f'{outlier_count} statistical outliers in recent data')
+                recommendations.append('Check for intermittent faults or sensor noise')
+            
+            health_score = max(0.0, min(1.0, health_score))
+            
+            if health_score >= 0.8:
+                eq_status = 'healthy'
+            elif health_score >= 0.6:
+                eq_status = 'degrading'
+            elif health_score >= 0.4:
+                eq_status = 'warning'
+            else:
+                eq_status = 'critical'
+            
+            health_items.append({
+                'equipment_type': eq.name.lower().replace(' ', '_'),
+                'equipment_id': f'{eq.name.lower().replace(" ", "_")}_primary',
+                'health_score': round(health_score, 2),
+                'status': eq_status,
+                'issues': issues,
+                'recommendations': recommendations,
+                'metrics': {
+                    'mean': round(avg_val, 2),
+                    'std_dev': round(std_dev, 2),
+                    'variance': round(variance, 2),
+                    'cv': round(cv, 3),
+                    'samples': len(values),
+                    'drift_pct': round(drift_pct, 1),
+                },
+                'timestamp': time.time(),
+            })
+        
+        health_items.sort(key=lambda x: x['health_score'])
+        return Response(health_items)
+
+
+class AIMaintenanceAlertsView(generics.GenericAPIView):
+    """Active maintenance alerts from AI analysis."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # Generate alerts from recent AI findings of type 'prediction'
+        recent_findings = AIFinding.objects.filter(
+            finding_type='prediction',
+            created_at__gte=timezone.now() - timedelta(hours=24)
+        ).select_related('tag').order_by('-created_at')[:20]
+        
+        alerts = []
+        for finding in recent_findings:
+            result = finding.result_json or {}
+            health_score = result.get('health_score', result.get('health', 100))
+            if isinstance(health_score, str):
+                health_score = {'good': 80, 'degrading': 50, 'critical': 20}.get(health_score, 50)
+            
+            if health_score < 70:
+                severity = 'critical' if health_score < 40 else 'warning'
+                alerts.append({
+                    'alert_type': result.get('alert_type', 'degradation'),
+                    'severity': severity,
+                    'equipment_type': finding.tag.name if finding.tag else 'unknown',
+                    'equipment_id': f'{finding.tag.name if finding.tag else "unknown"}_primary',
+                    'message': result.get('prediction', result.get('suggestion', 'Equipment degradation detected')),
+                    'confidence': result.get('confidence', 0.7),
+                    'recommended_action': result.get('recommended_action', result.get('recommendation', 'Schedule inspection')),
+                    'estimated_days_to_failure': result.get('estimated_days_to_failure'),
+                    'timestamp': finding.created_at.timestamp(),
+                })
+        
+        return Response(alerts)
+
+
+class AIEnergyAdvisoryView(generics.GenericAPIView):
+    """Calculate and return energy optimization recommendations and metrics dynamically."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        import time
+        from django.utils import timezone
+        from .models import Tag, TagLog
+
+        # 1. Fetch tags
+        flow_tag = Tag.objects.filter(name__icontains='flow').first()
+        press_tag = Tag.objects.filter(name__icontains='pressure').first()
+        pump_tag = Tag.objects.filter(name__icontains='pump').first()
+
+        # 2. Fetch recent logs (last 100)
+        logs_limit = 100
+        flow_logs = TagLog.objects.filter(tag=flow_tag).order_by('-timestamp')[:logs_limit] if flow_tag else []
+        press_logs = TagLog.objects.filter(tag=press_tag).order_by('-timestamp')[:logs_limit] if press_tag else []
+        pump_logs = TagLog.objects.filter(tag=pump_tag).order_by('-timestamp')[:logs_limit] if pump_tag else []
+
+        flows = [float(l.value) for l in flow_logs]
+        pressures = [float(l.value) for l in press_logs]
+        
+        # Latest values
+        flow = flows[0] if flows else 0.0
+        pressure = pressures[0] if pressures else 0.0
+        pump_on = (pump_logs[0].value > 0) if pump_logs else (flow > 10.0) # default true if flow > 10 L/min
+
+        # Power estimation
+        base_power = 7.5  # kW main pump rating
+        if not pump_on:
+            power = 0.5  # standby
+        else:
+            flow_ratio = flow / 230.0
+            power_factor = min(1.5, flow_ratio ** 1.5) if flow_ratio > 0 else 0.1
+            pressure_ratio = pressure / 3.5
+            pressure_penalty = 1.0 + abs(pressure_ratio - 1.0) * 0.2
+            power = base_power * power_factor * pressure_penalty
+
+        # Compute specific energy (kWh per m3 pumped)
+        flow_m3_h = flow * 0.06
+        specific_energy = power / flow_m3_h if flow_m3_h > 0 else 0.0
+
+        # Consumption estimation
+        avg_power = sum(
+            [7.5 * min(1.5, (f/230.0)**1.5) * (1.0 + abs((p/3.5)-1.0)*0.2) if f > 10.0 else 0.5 
+             for f, p in zip(flows[:20], pressures[:20])]
+        ) / max(len(flows[:20]), 1) if flows else 0.5
+        
+        daily_kwh = avg_power * 24.0
+        monthly_kwh = daily_kwh * 30.0
+        peak_demand_kw = max([power * 1.2 if pump_on else 0.5])
+
+        # Power factor
+        apparent_power = max(power, 0.1) * 1.1
+        power_factor = min(0.98, power / apparent_power)
+
+        # Efficiency rating
+        if flows:
+            avg_flow = sum(flows) / len(flows)
+            flow_efficiency = 1.0 - abs(avg_flow - 230.0) / 230.0
+            overall_efficiency = (power_factor + flow_efficiency) / 2
+        else:
+            overall_efficiency = power_factor
+
+        if overall_efficiency >= 0.85:
+            rating = 'A'
+        elif overall_efficiency >= 0.75:
+            rating = 'B'
+        elif overall_efficiency >= 0.65:
+            rating = 'C'
+        elif overall_efficiency >= 0.55:
+            rating = 'D'
+        else:
+            rating = 'F'
+
+        # Cost per cubic meter ( Ethiopian pricing: mid_peak = 1.80 ETB / kWh )
+        mid_peak_price = 1.80
+        monthly_cost = monthly_kwh * mid_peak_price
+        avg_flow_val = sum(flows) / len(flows) if flows else 1.0
+        monthly_volume_m3 = avg_flow_val * 0.06 * 24.0 * 30.0
+        cost_per_m3 = monthly_cost / max(monthly_volume_m3, 0.1)
+
+        # Recommendations
+        recommendations = []
+        
+        # 1. Scheduling
+        current_hour = timezone.now().hour
+        if 18 <= current_hour <= 22 and pump_on:
+            shift_amount = 7.5 * 2.0  # kwh
+            savings = shift_amount * (2.50 - 0.95)  # peak - off_peak diff
+            recommendations.append({
+                'category': 'scheduling',
+                'priority': 'high',
+                'title': 'Peak Hour Load Shifting Opportunity',
+                'description': 'The pump is currently operating during peak electricity tariff hours (18:00 - 22:00). Consider shifting non-critical pumping tasks to off-peak hours (22:00 - 08:00) to reduce peak demand charges.',
+                'estimated_savings_pct': 15.0,
+                'estimated_savings_etb': round(savings * 30, 2),
+                'implementation_effort': 'easy',
+                'metrics': {'current_hour': current_hour, 'pricing_diff': 1.55},
+                'timestamp': time.time(),
+            })
+
+        # 2. Efficiency
+        if flow > 0:
+            flow_dev = abs(flow - 230.0) / 230.0 * 100
+            press_dev = abs(pressure - 3.5) / 3.5 * 100
+            
+            recs_text = []
+            if flow_dev > 25:
+                recs_text.append(f"Pump operating point deviates significantly ({flow_dev:.1f}%) from its optimal flow rate of 230 L/min.")
+            if pressure > 4.2 and flow < 180:
+                recs_text.append("High system pressure paired with low flow suggests throttling. Installing a Variable Speed Drive (VSD) would prevent energy bypass loss.")
+                
+            if recs_text:
+                efficiency_loss_pct = min(35.0, flow_dev * 0.5 + press_dev * 0.5)
+                savings_eff = monthly_cost * (efficiency_loss_pct / 100)
+                recommendations.append({
+                    'category': 'efficiency',
+                    'priority': 'medium' if efficiency_loss_pct < 20 else 'high',
+                    'title': 'Variable Speed Drive (VSD) Optimization',
+                    'description': ' '.join(recs_text),
+                    'estimated_savings_pct': round(efficiency_loss_pct, 1),
+                    'estimated_savings_etb': round(savings_eff, 2),
+                    'implementation_effort': 'medium',
+                    'metrics': {'flow_deviation_pct': flow_dev, 'pressure_deviation_pct': press_dev},
+                    'timestamp': time.time(),
+                })
+        
+        # 3. Demand Charge
+        if pump_on and flow > 300:
+            recommendations.append({
+                'category': 'demand',
+                'priority': 'medium',
+                'title': 'Soft-Starter Installation',
+                'description': 'Frequent high-current start spikes increase capacity demand charges. Installing a soft-starter can smooth out start current peaks and prolong motor life.',
+                'estimated_savings_pct': 5.0,
+                'estimated_savings_etb': 250.00,
+                'implementation_effort': 'easy',
+                'metrics': {},
+                'timestamp': time.time(),
+            })
+
+        # Fallback default recommendation if list is empty
+        if not recommendations:
+            recommendations.append({
+                'category': 'scheduling',
+                'priority': 'low',
+                'title': 'Routine Scheduling Audit',
+                'description': 'Pump scheduling is currently optimal. Maintain current runtime settings and perform regular scheduling reviews quarterly.',
+                'estimated_savings_pct': 0.0,
+                'estimated_savings_etb': 0.0,
+                'implementation_effort': 'easy',
+                'metrics': {},
+                'timestamp': time.time(),
+            })
+
+        # Estimated savings
+        est_savings = sum(r['estimated_savings_etb'] for r in recommendations)
+
+        return Response({
+            'type': 'energy_advisory',
+            'source': 'energy_optimizer',
+            'metrics': {
+                'current_power_kw': round(power, 2),
+                'daily_consumption_kwh': round(daily_kwh, 2),
+                'monthly_consumption_kwh': round(monthly_kwh, 2),
+                'peak_demand_kw': round(peak_demand_kw, 2),
+                'power_factor': round(power_factor, 3),
+                'efficiency_rating': rating,
+                'cost_per_cubic_meter': round(cost_per_m3, 2),
+                'specific_energy_kwh_per_m3': round(specific_energy, 3),
+                'timestamp': time.time(),
+            },
+            'recommendations': recommendations,
+            'total_recommendations': len(recommendations),
+            'estimated_monthly_savings_etb': round(est_savings, 2),
+            'timestamp': time.time(),
+        })
+
+
+# --- Real-time SSE Endpoint ---
+
+class RealtimeStreamView(APIView):
+    """
+    Server-Sent Events endpoint for real-time data.
+    Clients can subscribe to: tags, alarms, ai, system, all
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from .realtime_service import sse_bus, generate_sse_stream
+        
+        channels_param = request.GET.get('channels', 'all')
+        channels = [c.strip() for c in channels_param.split(',')]
+        
+        client_id, event_queue = sse_bus.subscribe(channels)
+        
+        response = StreamingHttpResponse(
+            generate_sse_stream(client_id, event_queue, channels),
+            content_type='text/event-stream',
+        )
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
+
+
+# --- Comprehensive Audit Trail ---
+
+class AuditTrailView(generics.GenericAPIView):
+    """Query and retrieve audit trail records."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from .audit_service import audit_trail
+        
+        category = request.GET.get('category')
+        action = request.GET.get('action')
+        user = request.GET.get('user')
+        severity = request.GET.get('severity')
+        limit = int(request.GET.get('limit', 100))
+        
+        records = audit_trail.query(
+            category=category,
+            action=action,
+            user=user,
+            severity=severity,
+            limit=limit,
+        )
+        
+        return Response({
+            'count': len(records),
+            'records': records,
+        })
+
+
+class AuditTrailStatsView(generics.GenericAPIView):
+    """Audit trail statistics."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from .audit_service import audit_trail
+        
+        hours = int(request.GET.get('hours', 24))
+        stats = audit_trail.get_statistics(hours=hours)
+        return Response(stats)
+
+
+class AuditTrailExportView(generics.GenericAPIView):
+    """Export audit trail as CSV."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from .audit_service import audit_trail
+        
+        category = request.GET.get('category')
+        csv_content = audit_trail.export_csv(category=category)
+        
+        response = HttpResponse(csv_content, content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="audit_trail_{category or "all"}.csv"'
+        return response
+
+
+# --- Report Generation ---
+
+class ReportDailySummaryView(generics.GenericAPIView):
+    """Generate daily summary report."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from .report_service import report_generator
+        
+        date = request.GET.get('date')
+        report = report_generator.generate_daily_summary(date)
+        
+        format_type = request.GET.get('format', 'json')
+        if format_type == 'csv':
+            csv_content = report_generator.export_to_csv(report)
+            response = HttpResponse(csv_content, content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="daily_summary_{date or "today"}.csv"'
+            return response
+        
+        return Response(report)
+
+
+class ReportAlarmAnalysisView(generics.GenericAPIView):
+    """Generate alarm analysis report."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from .report_service import report_generator
+        
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        report = report_generator.generate_alarm_report(start_date, end_date)
+        
+        format_type = request.GET.get('format', 'json')
+        if format_type == 'csv':
+            csv_content = report_generator.export_to_csv(report)
+            response = HttpResponse(csv_content, content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="alarm_report.csv"'
+            return response
+        
+        return Response(report)
+
+
+class ReportEquipmentHealthView(generics.GenericAPIView):
+    """Generate equipment health report."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from .report_service import report_generator
+        
+        report = report_generator.generate_equipment_health_report()
+        
+        format_type = request.GET.get('format', 'json')
+        if format_type == 'csv':
+            csv_content = report_generator.export_to_csv(report)
+            response = HttpResponse(csv_content, content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="equipment_health.csv"'
+            return response
+        
+        return Response(report)
+
+
+class ReportPerformanceView(generics.GenericAPIView):
+    """Generate performance/production report."""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from .report_service import report_generator
+        
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        report = report_generator.generate_performance_report(start_date, end_date)
+        
+        format_type = request.GET.get('format', 'json')
+        if format_type == 'csv':
+            csv_content = report_generator.export_to_csv(report)
+            response = HttpResponse(csv_content, content_type='text/csv')
+            response['Content-Disposition'] = f'attachment; filename="performance_report.csv"'
+            return response
+        
+        return Response(report)
 

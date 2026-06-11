@@ -94,9 +94,10 @@ export default function NotificationCenterPage() {
         notify_complaint_sla: true,
       });
       setShowNewSubscription(false);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Failed to create subscription:', err);
-      alert(err.response?.data?.destination?.[0] || 'Failed to create subscription');
+      const error = err as { response?: { data?: { destination?: string[] } } };
+      alert(error.response?.data?.destination?.[0] || 'Failed to create subscription');
     }
   };
 

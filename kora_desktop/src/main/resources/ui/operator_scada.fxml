@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?import javafx.scene.canvas.Canvas?>
+<?import javafx.scene.control.ListView?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.VBox?>
+
+<!-- Operator SCADA UI -->
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.kora.desktop.controller.OperatorScadaController">
+    <center>
+        <Canvas fx:id="canvas" width="800" height="600" styleClass="operator-canvas" />
+    </center>
+    <right>
+        <VBox spacing="10" style="-fx-padding: 10;" styleClass="leak-panel">
+            <ListView fx:id="alarmListView" prefWidth="250" />
+        </VBox>
+    </right>
+</BorderPane>

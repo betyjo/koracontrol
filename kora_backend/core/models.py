@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 
 class User(AbstractUser):
     # Define roles as per the blueprint
@@ -15,9 +16,37 @@ class User(AbstractUser):
     
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default=CUSTOMER)
     phone_number = models.CharField(max_length=15, blank=True, null=True)
+    meter_tag = models.ForeignKey('core.Tag', null=True, blank=True, on_delete=models.SET_NULL, related_name='customers', help_text="SCADA Tag representing the consumer's water meter.")
+    billing_rate = models.DecimalField(max_digits=6, decimal_places=2, default=1.50, help_text="Rate per unit (e.g. per cubic meter).")
+    
+    profile_photo = models.ImageField(upload_to='profiles/', blank=True, null=True, help_text="Upload to auto-generate biometric encoding.")
+    face_encoding = models.JSONField(blank=True, null=True, help_text="Auto-generated array from profile_photo.")
 
     def __str__(self):
         return f"{self.username} ({self.role})"
+
+    def _update_face_encoding(self):
+        try:
+            import face_recognition
+            # The file should now be saved to disk, so we can access its path
+            if hasattr(self.profile_photo, 'path') and self.profile_photo.path:
+                image_path = self.profile_photo.path
+            else:
+                self.face_encoding = None
+                return
+
+            image = face_recognition.load_image_file(image_path)
+            encodings = face_recognition.face_encodings(image)
+            if encodings:
+                self.face_encoding = encodings[0].tolist()
+            else:
+                self.face_encoding = None
+        except ImportError:
+            # face_recognition library not installed - skip face encoding
+            self.face_encoding = None
+        except (Exception, SystemExit) as e:
+            # Log error but don't fail the save operation
+            self.face_encoding = None
 
     def save(self, *args, **kwargs):
         # Ensure superusers always have the admin role
@@ -26,13 +55,36 @@ class User(AbstractUser):
         # Ensure staff always have at least operator role if they are not admin
         elif self.is_staff and self.role == self.CUSTOMER:
             self.role = self.OPERATOR
+        
+        # Check if we should update face encoding
+        update_encoding = False
+        if self.profile_photo:
+            try:
+                old = User.objects.get(pk=self.pk) if self.pk else None
+                if not old or old.profile_photo != self.profile_photo:
+                    update_encoding = True
+            except User.DoesNotExist:
+                update_encoding = True
+            
+        # First save the model to ensure the photo is saved to disk
         super().save(*args, **kwargs)
+        
+        # Then update face encoding if needed
+        if update_encoding:
+            self._update_face_encoding()
+            # Save again if face encoding was updated
+            super().save(update_fields=['face_encoding'])
 
 class Tag(models.Model):
     name = models.CharField(max_length=100, unique=True) # e.g., "Boiler_Temp"
     data_type = models.CharField(max_length=20, default="float")
     unit = models.CharField(max_length=10, blank=True) # e.g., "°C"
     description = models.TextField(blank=True)
+    retention_days = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Custom retention period in days for this tag's logs. If blank, global default applies."
+    )
 
     def __str__(self):
         return self.name
@@ -257,6 +309,129 @@ class PlantEquipment(models.Model):
         return f'{self.area.code}:{self.code}'
 
 
+class MaintenanceTask(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('scheduled', 'Scheduled'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    PRIORITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('critical', 'Critical'),
+    ]
+
+    asset = models.ForeignKey(
+        PlantEquipment,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='maintenance_tasks',
+    )
+    title = models.CharField(max_length=180)
+    description = models.TextField(blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='pending')
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
+    created_by = models.ForeignKey(
+        'core.User',
+        on_delete=models.CASCADE,
+        related_name='maintenance_tasks_created',
+    )
+    assigned_to = models.ForeignKey(
+        'core.User',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='maintenance_tasks_assigned',
+    )
+    planned_start = models.DateTimeField(null=True, blank=True)
+    planned_end = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('-planned_start', '-created_at')
+
+    def __str__(self):
+        return f'{self.title} ({self.status})'
+
+
+class ProcessSetpoint(models.Model):
+    MODE_CHOICES = [
+        ('auto', 'Automatic'),
+        ('manual', 'Manual'),
+    ]
+
+    tag = models.ForeignKey(Tag, on_delete=models.CASCADE, related_name='setpoints')
+    target_value = models.FloatField()
+    tolerance = models.FloatField(null=True, blank=True)
+    mode = models.CharField(max_length=16, choices=MODE_CHOICES, default='auto')
+    description = models.TextField(blank=True)
+    effective_from = models.DateTimeField(default=timezone.now)
+    effective_until = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('-effective_from',)
+
+    def __str__(self):
+        return f'Setpoint {self.tag.name} -> {self.target_value}'
+
+
+class WaterQualityMetric(models.Model):
+    STATUS_CHOICES = [
+        ('normal', 'Normal'),
+        ('warning', 'Warning'),
+        ('critical', 'Critical'),
+    ]
+
+    area = models.ForeignKey(PlantArea, null=True, blank=True, on_delete=models.SET_NULL, related_name='quality_metrics')
+    tag = models.ForeignKey(Tag, null=True, blank=True, on_delete=models.SET_NULL, related_name='quality_metrics')
+    metric_name = models.CharField(max_length=120)
+    current_value = models.FloatField()
+    unit = models.CharField(max_length=16, blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='normal')
+    threshold_low = models.FloatField(null=True, blank=True)
+    threshold_high = models.FloatField(null=True, blank=True)
+    last_updated = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ('metric_name', '-last_updated')
+        unique_together = [('area', 'tag', 'metric_name')]
+
+    def __str__(self):
+        return f'{self.metric_name} ({self.status})'
+
+
+class EquipmentHealth(models.Model):
+    equipment = models.ForeignKey(
+        PlantEquipment,
+        on_delete=models.CASCADE,
+        related_name='health_records',
+    )
+    health_score = models.DecimalField(max_digits=5, decimal_places=2, default=100.0)
+    condition = models.TextField(blank=True)
+    last_inspection_at = models.DateTimeField(null=True, blank=True)
+    next_due_at = models.DateTimeField(null=True, blank=True)
+    recommended_action = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ('-last_inspection_at', '-created_at')
+
+    def __str__(self):
+        return f'{self.equipment.name} health {self.health_score}'
+
+
 class TrendAnnotation(models.Model):
     """Incident / maintenance marker on trend charts."""
 
@@ -413,4 +588,51 @@ class ChatAttachment(models.Model):
     def __str__(self):
         return f"Attachment {self.id} - {self.original_name}"
 
+
+class OperatorActionLog(models.Model):
+    """Audit trail for all operator control actions."""
+    ACTION_TYPES = [
+        ('control', 'Control'),
+        ('setpoint', 'Setpoint'),
+        ('alarm', 'Alarm'),
+        ('override', 'Override'),
+    ]
+
+    user = models.ForeignKey('core.User', on_delete=models.CASCADE, related_name='action_logs')
+    action_type = models.CharField(max_length=20, choices=ACTION_TYPES)
+    target_tag = models.ForeignKey('core.Tag', null=True, blank=True, on_delete=models.SET_NULL, related_name='action_logs')
+    description = models.TextField()
+    old_value = models.CharField(max_length=100, blank=True)
+    new_value = models.CharField(max_length=100, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+
+    def __str__(self):
+        return f"{self.user.username} {self.action_type} @ {self.created_at}"
+
+
+class AIFinding(models.Model):
+    """Persisted AI analysis results for audit and trending."""
+    FINDING_TYPES = [
+        ('anomaly', 'Anomaly'),
+        ('prediction', 'Prediction'),
+        ('prioritization', 'Prioritization'),
+        ('root_cause', 'Root Cause'),
+        ('trend_abnormality', 'Trend Abnormality'),
+    ]
+
+    finding_type = models.CharField(max_length=20, choices=FINDING_TYPES, db_index=True)
+    tag = models.ForeignKey('core.Tag', null=True, blank=True, on_delete=models.SET_NULL, related_name='ai_findings')
+    alarm_event = models.ForeignKey('core.AlarmEvent', null=True, blank=True, on_delete=models.SET_NULL, related_name='ai_findings')
+    result_json = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+
+    def __str__(self):
+        return f"{self.finding_type} finding @ {self.created_at}"
 

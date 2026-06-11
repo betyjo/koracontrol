@@ -2,18 +2,19 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
   Receipt,
   CreditCard,
   CheckCircle,
   AlertCircle,
   Loader2,
-  Calendar,
-  Zap,
+  Droplet,
   ArrowLeftRight,
 } from "lucide-react";
-import api from "@/lib/api";
+import api, { dashboardKpiApi, type BillForecast, type UsageComparison, type ServiceOutage } from "@/lib/api";
 import { PageTransition } from "@/components/PageTransition";
+import { getUserRole, hasPermission, UserRole } from "@/lib/permissions";
 
 interface Bill {
   id: number;
@@ -34,14 +35,29 @@ interface PaymentTransaction {
 
 function BillingInner() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const billIdFocus = searchParams.get("billId");
   const txRefFocus = searchParams.get("txRef");
 
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [bills, setBills] = useState<Bill[]>([]);
   const [transactions, setTransactions] = useState<PaymentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payingBillId, setPayingBillId] = useState<number | null>(null);
+  const [forecast, setForecast] = useState<BillForecast | null>(null);
+  const [usageComparison, setUsageComparison] = useState<UsageComparison | null>(null);
+  const [outages, setOutages] = useState<ServiceOutage[]>([]);
+
+  useEffect(() => {
+    // Check user permissions
+    const role = getUserRole();
+    if (!role || !hasPermission(role, 'canViewBilling')) {
+      router.replace('/dashboard');
+      return;
+    }
+    setUserRole(role);
+  }, [router]);
 
   const fetchAll = async () => {
     try {
@@ -61,9 +77,27 @@ function BillingInner() {
     }
   };
 
+  const fetchCustomerInsights = async () => {
+    try {
+      const [forecastRes, usageRes, outageRes] = await Promise.allSettled([
+        dashboardKpiApi.getBillForecast(),
+        dashboardKpiApi.getUsageComparison(),
+        dashboardKpiApi.getServiceOutages(),
+      ]);
+      if (forecastRes.status === "fulfilled") setForecast(forecastRes.value.data);
+      if (usageRes.status === "fulfilled") setUsageComparison(usageRes.value.data);
+      if (outageRes.status === "fulfilled") setOutages(outageRes.value.data.outages || []);
+    } catch {
+      // non-critical – silently ignore
+    }
+  };
+
   useEffect(() => {
-    fetchAll();
-  }, []);
+    if (userRole) {
+      fetchAll();
+      fetchCustomerInsights();
+    }
+  }, [userRole]);
 
   useEffect(() => {
     if (loading || error) return;
@@ -84,6 +118,11 @@ function BillingInner() {
   }, [billIdFocus, txRefFocus, bills, transactions, loading, error]);
 
   const handlePay = async (billId: number) => {
+    if (!userRole || !hasPermission(userRole, 'canManageBilling')) {
+      setError("You don't have permission to make payments.");
+      return;
+    }
+    
     try {
       setPayingBillId(billId);
       const res = await api.post(`payments/initiate/${billId}/`);
@@ -137,6 +176,8 @@ function BillingInner() {
     );
   }
 
+  const canManageBilling = userRole && hasPermission(userRole, 'canManageBilling');
+
   return (
     <PageTransition>
       <div className="p-6 max-w-7xl mx-auto">
@@ -148,6 +189,23 @@ function BillingInner() {
             Bill history and Chapa checkout activity — aligns with Django admin Bills & Transactions.
           </p>
         </div>
+
+        {/* Service Outage Banner */}
+        {outages.length > 0 && (
+          <div className="mb-6 rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10 p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="text-red-500 mt-0.5 shrink-0" size={20} />
+              <div>
+                <h3 className="font-semibold text-red-800 dark:text-red-200">Active Service Alerts</h3>
+                {outages.map((o) => (
+                  <p key={o.id} className="text-sm text-red-600 dark:text-red-300 mt-1">
+                    <span className="font-medium">{o.title}:</span> {o.message}
+                  </p>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <SummaryCard
@@ -169,12 +227,79 @@ function BillingInner() {
             bgColor="bg-amber-50 dark:bg-amber-900/20"
           />
           <SummaryCard
-            title="Total Usage"
-            value={`${totalUsage.toFixed(1)} kWh`}
-            icon={<Zap className="text-purple-500 dark:text-purple-400" />}
-            bgColor="bg-purple-50 dark:bg-purple-900/20"
+            title="Total Water Usage"
+            value={`${(totalUsage ?? 0).toFixed(1)} m³`}
+            icon={<Droplet className="text-blue-500 dark:text-blue-400" />}
+            bgColor="bg-blue-50 dark:bg-blue-900/20"
           />
         </div>
+
+        {/* Customer Insights: Forecast + Usage Comparison */}
+        {(forecast || usageComparison) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            {forecast && (
+              <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border dark:border-slate-800 p-6 transition-colors">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                  <Receipt className="text-blue-500" size={18} />
+                  Next Bill Forecast
+                </h2>
+                <div className="text-3xl font-bold text-slate-900 dark:text-white mb-1">
+                  ETB {(forecast.forecast_amount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">
+                  Estimated {(forecast.forecast_usage ?? 0).toFixed(1)} m³ @ ETB {forecast.rate_per_unit}/m³
+                </p>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                    forecast.trend_pct > 0
+                      ? "bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300"
+                      : forecast.trend_pct < 0
+                      ? "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                  }`}>
+                    {(forecast.trend_pct ?? 0) > 0 ? "+" : ""}{(forecast.trend_pct ?? 0).toFixed(1)}%
+                  </span>
+                  <span className="text-xs text-slate-400">vs avg ETB {(forecast.avg_amount ?? 0).toFixed(0)}</span>
+                </div>
+                <div className="flex items-center gap-1 text-xs text-slate-400">
+                  <span>Confidence:</span>
+                  <span className={`font-medium ${
+                    forecast.confidence === "high" ? "text-emerald-500" : forecast.confidence === "medium" ? "text-amber-500" : "text-slate-400"
+                  }`}>{forecast.confidence}</span>
+                </div>
+              </div>
+            )}
+            {usageComparison && (
+              <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border dark:border-slate-800 p-6 transition-colors">
+                <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                  <Droplet className="text-blue-500" size={18} />
+                  Usage Comparison
+                </h2>
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">This Month</p>
+                    <p className="text-xl font-bold text-slate-900 dark:text-white">{(usageComparison.this_month.usage ?? 0).toFixed(1)} m³</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">ETB {(usageComparison.this_month.cost ?? 0).toFixed(0)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide">Last Month</p>
+                    <p className="text-xl font-bold text-slate-500 dark:text-slate-400">{(usageComparison.last_month.usage ?? 0).toFixed(1)} m³</p>
+                    <p className="text-sm text-slate-400">ETB {(usageComparison.last_month.cost ?? 0).toFixed(0)}</p>
+                  </div>
+                </div>
+                <div className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
+                  usageComparison.change_pct > 0
+                    ? "bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300"
+                    : usageComparison.change_pct < 0
+                    ? "bg-emerald-100 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600"
+                }`}>
+                  {(usageComparison.change_pct ?? 0) > 0 ? "+" : ""}{(usageComparison.change_pct ?? 0).toFixed(1)}% vs last month
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border dark:border-slate-800 overflow-hidden transition-colors duration-500 mb-8">
           <div className="p-6 border-b dark:border-slate-800">
@@ -198,7 +323,7 @@ function BillingInner() {
                   <tr>
                     <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Bill ID</th>
                     <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Date</th>
-                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Usage</th>
+                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Water Usage</th>
                     <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Amount</th>
                     <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Status</th>
                     <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Action</th>
@@ -220,73 +345,53 @@ function BillingInner() {
                           #{bill.id}
                         </span>
                       </td>
+                      <td className="p-4 text-slate-600 dark:text-slate-400">
+                        {new Date(bill.billing_date).toLocaleDateString()}
+                      </td>
+                      <td className="p-4 text-slate-600 dark:text-slate-400">
+                        {(bill.usage_kwh ?? 0).toFixed(1)} m³
+                      </td>
+                      <td className="p-4 font-medium text-slate-900 dark:text-white">
+                        ETB {parseFloat(bill.amount).toLocaleString()}
+                      </td>
                       <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <Calendar size={16} className="text-slate-400 dark:text-slate-500" />
-                          <span className="text-slate-700 dark:text-slate-300">
-                            {new Date(bill.billing_date).toLocaleDateString("en-US", {
-                              year: "numeric",
-                              month: "short",
-                              day: "numeric",
-                            })}
+                        {bill.is_paid ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                            <CheckCircle size={12} />
+                            Paid
                           </span>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2 transition-colors">
-                          <Zap size={16} className="text-slate-400 dark:text-slate-500" />
-                          <span className="text-slate-700 dark:text-slate-300">
-                            {bill.usage_kwh} kWh
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <span className="font-semibold text-slate-900 dark:text-white transition-colors">
-                          ETB {parseFloat(bill.amount).toLocaleString()}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span
-                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                            bill.is_paid
-                              ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                              : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-                          }`}
-                        >
-                          {bill.is_paid ? (
-                            <>
-                              <CheckCircle size={12} />
-                              Paid
-                            </>
-                          ) : (
-                            <>
-                              <AlertCircle size={12} />
-                              Unpaid
-                            </>
-                          )}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        {!bill.is_paid ? (
-                          <button
-                            onClick={() => handlePay(bill.id)}
-                            disabled={payingBillId === bill.id}
-                            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer disabled:cursor-not-allowed"
-                          >
-                            {payingBillId === bill.id ? (
-                              <>
-                                <Loader2 size={16} className="animate-spin" />
-                                Processing...
-                              </>
-                            ) : (
-                              <>
-                                <CreditCard size={16} />
-                                Pay now
-                              </>
-                            )}
-                          </button>
                         ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                            <AlertCircle size={12} />
+                            Unpaid
+                          </span>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        {bill.is_paid ? (
                           <span className="text-slate-400 text-sm">—</span>
+                        ) : (
+                          canManageBilling ? (
+                            <button
+                              onClick={() => handlePay(bill.id)}
+                              disabled={payingBillId === bill.id}
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                            >
+                              {payingBillId === bill.id ? (
+                                <>
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  Processing...
+                                </>
+                              ) : (
+                                <>
+                                  <CreditCard size={16} />
+                                  Pay Now
+                                </>
+                              )}
+                            </button>
+                          ) : (
+                            <span className="text-slate-400 text-sm">View only</span>
+                          )
                         )}
                       </td>
                     </tr>
@@ -297,55 +402,66 @@ function BillingInner() {
           )}
         </div>
 
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border dark:border-slate-800 overflow-hidden transition-colors duration-500 mb-8">
-          <div className="p-6 border-b dark:border-slate-800 flex items-center gap-2">
-            <ArrowLeftRight className="text-slate-500 dark:text-slate-400" size={22} />
-            <div>
-              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
-                Payment transactions
-              </h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Checkout attempts and callback status (mirrors Payment transactions in admin).
-              </p>
-            </div>
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border dark:border-slate-800 overflow-hidden transition-colors duration-500">
+          <div className="p-6 border-b dark:border-slate-800">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">Transaction History</h2>
           </div>
+
           {transactions.length === 0 ? (
-            <div className="p-10 text-center text-slate-500 dark:text-slate-400 text-sm">
-              No payment attempts yet — start checkout from an unpaid bill.
+            <div className="p-12 text-center transition-colors">
+              <ArrowLeftRight className="mx-auto h-16 w-16 text-slate-300 dark:text-slate-700 mb-4" />
+              <h3 className="text-lg font-medium text-slate-900 dark:text-white mb-2">
+                No transactions yet
+              </h3>
+              <p className="text-slate-500 dark:text-slate-400">
+                Your payment transactions will appear here after checkout.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead className="bg-slate-50 dark:bg-slate-800/50 border-b dark:border-slate-800 transition-colors">
                   <tr>
-                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Reference</th>
-                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Bill</th>
+                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">TX Ref</th>
+                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Bill ID</th>
                     <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Amount</th>
                     <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Status</th>
-                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Created</th>
+                    <th className="p-4 font-semibold text-slate-700 dark:text-slate-300">Date</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.map((t) => (
+                  {transactions.map((txn) => (
                     <tr
-                      key={t.id}
-                      id={`tx-row-${t.id}`}
+                      key={txn.id}
+                      id={`tx-row-${txn.id}`}
                       className={`border-b dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors ${
-                        txRefFocus === t.tx_ref ? "bg-blue-50/70 dark:bg-blue-950/30" : ""
+                        txRefFocus === txn.tx_ref ? "bg-blue-50/70 dark:bg-blue-950/30" : ""
                       }`}
                     >
-                      <td className="p-4 font-mono text-xs text-slate-800 dark:text-slate-200 break-all max-w-[12rem]">
-                        {t.tx_ref}
+                      <td className="p-4">
+                        <code className="text-sm bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-700 dark:text-slate-300">
+                          {txn.tx_ref}
+                        </code>
                       </td>
-                      <td className="p-4 text-slate-700 dark:text-slate-300">#{t.bill_id}</td>
+                      <td className="p-4 text-slate-600 dark:text-slate-400">#{txn.bill_id}</td>
                       <td className="p-4 font-medium text-slate-900 dark:text-white">
-                        ETB {parseFloat(t.amount).toLocaleString()}
+                        ETB {parseFloat(txn.amount).toLocaleString()}
                       </td>
-                      <td className="p-4 capitalize text-slate-700 dark:text-slate-300">
-                        {t.status}
+                      <td className="p-4">
+                        {txn.status === 'completed' ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                            <CheckCircle size={12} />
+                            Completed
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400">
+                            <AlertCircle size={12} />
+                            {txn.status}
+                          </span>
+                        )}
                       </td>
-                      <td className="p-4 text-sm text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                        {new Date(t.created_at).toLocaleString()}
+                      <td className="p-4 text-slate-600 dark:text-slate-400">
+                        {new Date(txn.created_at).toLocaleString()}
                       </td>
                     </tr>
                   ))}
@@ -354,53 +470,40 @@ function BillingInner() {
             </div>
           )}
         </div>
-
-        <div className="mt-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-6 transition-colors duration-500">
-          <div className="flex items-start gap-4">
-            <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-              <CreditCard className="text-blue-600 dark:text-blue-400" size={24} />
-            </div>
-            <div>
-              <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-1">
-                Secure payments with Chapa
-              </h3>
-              <p className="text-blue-700 dark:text-blue-300 text-sm">
-                You&apos;ll complete payment on Chapa&apos;s hosted checkout when you tap Pay now.
-              </p>
-            </div>
-          </div>
-        </div>
       </div>
     </PageTransition>
   );
 }
 
-interface SummaryCardProps {
+function SummaryCard({
+  title,
+  value,
+  icon,
+  bgColor,
+}: {
   title: string;
   value: string;
   icon: React.ReactNode;
   bgColor: string;
-}
-
-function SummaryCard({ title, value, icon, bgColor }: SummaryCardProps) {
+}) {
   return (
-    <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border dark:border-slate-800 hover:shadow-md transition-all duration-300">
-      <div className={`p-3 ${bgColor} rounded-lg w-fit mb-4 transition-colors`}>{icon}</div>
-      <p className="text-sm text-slate-500 dark:text-slate-400 mb-1 transition-colors">{title}</p>
-      <p className="text-2xl font-bold text-slate-900 dark:text-white transition-colors">{value}</p>
+    <div className={`${bgColor} rounded-xl p-6 border border-slate-200 dark:border-slate-700 transition-colors`}>
+      <div className="flex items-center gap-3 mb-2">
+        {icon}
+        <span className="text-sm font-medium text-slate-600 dark:text-slate-400">{title}</span>
+      </div>
+      <div className="text-2xl font-bold text-slate-900 dark:text-white">{value}</div>
     </div>
   );
 }
 
 export default function BillingPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="p-6 max-w-7xl mx-auto flex justify-center py-24">
-          <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
-        </div>
-      }
-    >
+    <Suspense fallback={<div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-12 w-12 animate-spin text-blue-600" />
+      </div>
+    </div>}>
       <BillingInner />
     </Suspense>
   );

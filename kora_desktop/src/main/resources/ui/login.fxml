@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.PasswordField?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.effect.DropShadow?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.StackPane?>
+<?import javafx.scene.layout.VBox?>
+
+<StackPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+           styleClass="login-container"
+           prefHeight="700.0" prefWidth="1000.0">
+    
+    <VBox alignment="CENTER" spacing="20" styleClass="card">
+        <padding>
+            <Insets top="40" right="40" bottom="40" left="40"/>
+        </padding>
+        
+        <!-- Logo/Icon Section -->
+        <VBox alignment="CENTER" spacing="15">
+            <ImageView fx:id="logoImageView" fitHeight="120" fitWidth="120" 
+                       preserveRatio="true" smooth="true">
+                <Image url="@icon.png"/>
+
+            </ImageView>
+            <Label text="KORA CONTROL" styleClass="title-text">
+
+            </Label>
+            <Label text="Water Industry SCADA HMI" styleClass="subtitle-text"/>
+        </VBox>
+        
+        <VBox spacing="20" styleClass="card-elevated">
+            <padding>
+                <Insets top="30" right="30" bottom="30" left="30"/>
+            </padding>
+            
+            <!-- Login Form -->
+            <VBox spacing="15">
+                <Label text="OPERATOR LOGIN" styleClass="title-text"/>
+                
+                <VBox spacing="8">
+                    <Label text="Username" styleClass="label-text"/>
+                    <TextField fx:id="usernameField" promptText="Enter username" 
+                             styleClass="text-field-dark" prefWidth="300"/>
+                </VBox>
+                
+                <VBox spacing="8">
+                    <Label text="Password" styleClass="label-text"/>
+                    <PasswordField fx:id="passwordField" promptText="Enter password" 
+                                  styleClass="password-field-dark" prefWidth="300"/>
+                </VBox>
+                
+                <Label fx:id="errorLabel" styleClass="label-text" style="-fx-text-fill: #ff4444;" 
+                       visible="false" wrapText="true"/>
+                
+                <VBox spacing="10">
+                    <Button fx:id="loginButton" text="LOGIN" styleClass="button-primary" 
+                           prefWidth="300" prefHeight="45"/>
+                    <Button fx:id="faceLoginButton" text="FACE ID LOGIN" styleClass="button-secondary" 
+                           prefWidth="300" prefHeight="45"/>
+                </VBox>
+            </VBox>
+        </VBox>
+        
+        <!-- Footer -->
+        <HBox alignment="CENTER" spacing="10">
+            <Label text="© 2024 Kora Control Systems" styleClass="label-text" 
+                   style="-fx-font-size: 11px; -fx-text-fill: #5a7a9a;"/>
+            <Label text="•" style="-fx-text-fill: #5a7a9a;"/>
+            <Label text="Secure Industrial Control System" styleClass="label-text" 
+                   style="-fx-font-size: 11px; -fx-text-fill: #5a7a9a;"/>
+        </HBox>
+    </VBox>
+    
+</StackPane>

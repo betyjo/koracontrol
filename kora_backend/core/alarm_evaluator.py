@@ -1,6 +1,7 @@
 from django.utils import timezone
 
 from .models import AlarmEvent, AlarmRule, TagLog
+from .mqtt_service import publish_alarm_notification
 
 
 OPEN_STATES = ["active", "acknowledged", "shelved"]
@@ -45,7 +46,7 @@ def _evaluate_rule(rule: AlarmRule, tag_log: TagLog) -> None:
         return
 
     message = _build_message(rule, level, value)
-    AlarmEvent.objects.create(
+    event = AlarmEvent.objects.create(
         rule=rule,
         tag_log=tag_log,
         level=level,
@@ -53,6 +54,8 @@ def _evaluate_rule(rule: AlarmRule, tag_log: TagLog) -> None:
         triggered_value=value,
         message=message,
     )
+    # Publish alarm notification to MQTT
+    _publish_alarm_event_notification(event)
 
 
 def _evaluate_with_open_event(
@@ -111,7 +114,7 @@ def _maybe_open_after_return(rule: AlarmRule, tag_log: TagLog, value: float) -> 
     if level is None:
         return
     message = _build_message(rule, level, value)
-    AlarmEvent.objects.create(
+    event = AlarmEvent.objects.create(
         rule=rule,
         tag_log=tag_log,
         level=level,
@@ -119,6 +122,8 @@ def _maybe_open_after_return(rule: AlarmRule, tag_log: TagLog, value: float) -> 
         triggered_value=value,
         message=message,
     )
+    # Publish alarm notification to MQTT
+    _publish_alarm_event_notification(event)
 
 
 def _refresh_open_event(event: AlarmEvent, tag_log: TagLog, value: float, level: str) -> None:
@@ -128,6 +133,8 @@ def _refresh_open_event(event: AlarmEvent, tag_log: TagLog, value: float, level:
     event.message = message
     event.tag_log = tag_log
     event.save(update_fields=["level", "triggered_value", "message", "tag_log"])
+    # Publish updated alarm notification to MQTT
+    _publish_alarm_event_notification(event)
 
 
 def _close_event_returned(event: AlarmEvent, tag_log: TagLog, value: float, now) -> None:
@@ -135,6 +142,8 @@ def _close_event_returned(event: AlarmEvent, tag_log: TagLog, value: float, now)
     event.returned_to_normal_at = now
     event.tag_log = tag_log
     event.save(update_fields=["state", "returned_to_normal_at", "tag_log"])
+    # Publish alarm return notification to MQTT
+    _publish_alarm_event_notification(event)
 
 
 def _build_message(rule: AlarmRule, level: str, value: float) -> str:
@@ -198,3 +207,27 @@ def _still_latched_warning(rule: AlarmRule, value: float, deadband: float, side:
         clear_above = rule.warning_low + deadband
         return value <= clear_above
     return False
+
+
+def _publish_alarm_event_notification(event: AlarmEvent) -> None:
+    """Publish alarm event notification to MQTT"""
+    try:
+        alarm_data = {
+            'id': event.id,
+            'rule_id': event.rule.id,
+            'rule_name': event.rule.name,
+            'tag_id': event.rule.tag.id,
+            'tag_name': event.rule.tag.name,
+            'severity': event.rule.severity,
+            'level': event.level,
+            'state': event.state,
+            'triggered_value': event.triggered_value,
+            'message': event.message,
+            'triggered_at': event.triggered_at.isoformat() if event.triggered_at else None,
+        }
+        publish_alarm_notification(alarm_data)
+    except Exception as e:
+        # Log error but don't fail alarm evaluation
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to publish alarm notification: {e}")

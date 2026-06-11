@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            style="-fx-background-color: #071426;">
+
+    <!-- Header -->
+    <top>
+        <VBox spacing="20">
+            <padding>
+                <Insets top="20" right="20" bottom="10" left="20"/>
+            </padding>
+            
+            <HBox alignment="CENTER_LEFT" spacing="15">
+                <Label text="ALARM MANAGEMENT" styleClass="title-text" style="-fx-font-size: 28px;"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <HBox spacing="15" alignment="CENTER">
+                    <Label text="Active Alarms:" styleClass="label-text"/>
+                    <Label fx:id="activeAlarmCount" text="3" styleClass="status-warning" style="-fx-font-size: 16px;"/>
+                </HBox>
+            </HBox>
+            
+            <!-- Filter and Control Bar -->
+            <HBox spacing="15" alignment="CENTER_LEFT">
+                <VBox spacing="5">
+                    <Label text="Severity Filter:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                    <ComboBox fx:id="severityFilterCombo" prefWidth="150" styleClass="combo-box"/>
+                </VBox>
+                
+                <VBox spacing="5">
+                    <Label text="State Filter:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                    <ComboBox fx:id="stateFilterCombo" prefWidth="150" styleClass="combo-box"/>
+                </VBox>
+                
+                <VBox spacing="5">
+                    <Label text="Time Range:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                    <ComboBox fx:id="timeFilterCombo" prefWidth="150" styleClass="combo-box"/>
+                </VBox>
+                
+                <Region HBox.hgrow="ALWAYS"/>
+                
+                <HBox spacing="10">
+                    <TextField fx:id="searchField" promptText="Search alarms..." prefWidth="250" styleClass="text-field-dark"/>
+                    <Button fx:id="refreshButton" text="Refresh" styleClass="button-secondary"/>
+                    <Button fx:id="acknowledgeAllButton" text="Acknowledge All" styleClass="button-primary"/>
+                    <Button fx:id="exportButton" text="Export" styleClass="button-secondary"/>
+                </HBox>
+            </HBox>
+        </VBox>
+    </top>
+
+    <!-- Main Content -->
+    <center>
+        <VBox spacing="20">
+            <padding>
+                <Insets top="10" right="20" bottom="20" left="20"/>
+            </padding>
+            
+            <!-- Critical Alarms Banner -->
+            <HBox fx:id="criticalBanner" spacing="15" styleClass="alarm-critical" visible="false" managed="false">
+                <padding>
+                    <Insets top="15" right="20" bottom="15" left="20"/>
+                </padding>
+                <Label text="⚠ CRITICAL ALARMS ACTIVE" styleClass="title-text" style="-fx-font-size: 16px; -fx-text-fill: #ff4444;"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="criticalCountLabel" text="1 critical alarm" styleClass="label-text" style="-fx-text-fill: #ff4444;"/>
+                <Button fx:id="dismissCriticalButton" text="Dismiss" styleClass="button-danger" style="-fx-background-color: #ff4444;"/>
+            </HBox>
+            
+            <!-- Alarm Statistics -->
+            <HBox spacing="15">
+                <!-- Critical Count -->
+                <VBox spacing="8" styleClass="kpi-card" prefWidth="180" prefHeight="100">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="CRITICAL" styleClass="kpi-title"/>
+                    <HBox spacing="5" alignment="CENTER_LEFT">
+                        <Label fx:id="criticalCount" text="1" styleClass="kpi-value critical"/>
+                        <Label text="active" styleClass="kpi-unit"/>
+                    </HBox>
+                </VBox>
+                
+                <!-- High Count -->
+                <VBox spacing="8" styleClass="kpi-card" prefWidth="180" prefHeight="100">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="HIGH" styleClass="kpi-title"/>
+                    <HBox spacing="5" alignment="CENTER_LEFT">
+                        <Label fx:id="highCount" text="2" styleClass="kpi-value" style="-fx-text-fill: #ff9d00;"/>
+                        <Label text="active" styleClass="kpi-unit"/>
+                    </HBox>
+                </VBox>
+                
+                <!-- Medium Count -->
+                <VBox spacing="8" styleClass="kpi-card" prefWidth="180" prefHeight="100">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="MEDIUM" styleClass="kpi-title"/>
+                    <HBox spacing="5" alignment="CENTER_LEFT">
+                        <Label fx:id="mediumCount" text="5" styleClass="kpi-value" style="-fx-text-fill: #ffdd00;"/>
+                        <Label text="active" styleClass="kpi-unit"/>
+                    </HBox>
+                </VBox>
+                
+                <!-- Low Count -->
+                <VBox spacing="8" styleClass="kpi-card" prefWidth="180" prefHeight="100">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="LOW" styleClass="kpi-title"/>
+                    <HBox spacing="5" alignment="CENTER_LEFT">
+                        <Label fx:id="lowCount" text="12" styleClass="kpi-value" style="-fx-text-fill: #00d4ff;"/>
+                        <Label text="active" styleClass="kpi-unit"/>
+                    </HBox>
+                </VBox>
+                
+                <!-- Total Acknowledged -->
+                <VBox spacing="8" styleClass="kpi-card" prefWidth="180" prefHeight="100">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="ACKNOWLEDGED" styleClass="kpi-title"/>
+                    <HBox spacing="5" alignment="CENTER_LEFT">
+                        <Label fx:id="acknowledgedCount" text="8" styleClass="kpi-value" style="-fx-text-fill: #6495ed;"/>
+                        <Label text="total" styleClass="kpi-unit"/>
+                    </HBox>
+                </VBox>
+                
+                <Region HBox.hgrow="ALWAYS"/>
+                
+                <!-- Alarm Trend -->
+                <VBox spacing="8" styleClass="kpi-card" prefWidth="200" prefHeight="100">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="TREND" styleClass="kpi-title"/>
+                    <HBox spacing="5" alignment="CENTER_LEFT">
+                        <Label text="↓ 15\%" styleClass="kpi-value good"/>
+                        <Label text="vs last hour" styleClass="kpi-unit"/>
+                    </HBox>
+                </VBox>
+            </HBox>
+            
+            <!-- Alarm Table -->
+            <VBox spacing="15" styleClass="card" VBox.vgrow="ALWAYS">
+                <padding>
+                    <Insets top="20" right="20" bottom="20" left="20"/>
+                </padding>
+                
+                <HBox alignment="CENTER_LEFT" spacing="15">
+                    <Label text="ALARM LIST" styleClass="subtitle-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <CheckBox fx:id="autoRefreshCheck" text="Auto-refresh (30s)" selected="true" styleClass="check-box"/>
+                </HBox>
+                
+                <TableView fx:id="alarmTable" styleClass="table-view" VBox.vgrow="ALWAYS">
+                    <columns>
+                        <TableColumn fx:id="idColumn" text="ID" prefWidth="80" style="-fx-alignment: CENTER;"/>
+                        <TableColumn fx:id="severityColumn" text="Severity" prefWidth="100" style="-fx-alignment: CENTER;"/>
+                        <TableColumn fx:id="stateColumn" text="State" prefWidth="100" style="-fx-alignment: CENTER;"/>
+                        <TableColumn fx:id="sourceColumn" text="Source" prefWidth="150"/>
+                        <TableColumn fx:id="descriptionColumn" text="Description" prefWidth="400"/>
+                        <TableColumn fx:id="valueColumn" text="Value" prefWidth="120" style="-fx-alignment: CENTER;"/>
+                        <TableColumn fx:id="timeColumn" text="Time" prefWidth="150" style="-fx-alignment: CENTER;"/>
+                        <TableColumn fx:id="actionsColumn" text="Actions" prefWidth="120" style="-fx-alignment: CENTER;"/>
+                    </columns>
+                </TableView>
+                
+                <HBox alignment="CENTER_LEFT" spacing="15">
+                    <Label fx:id="showingLabel" text="Showing 1-25 of 45 alarms" styleClass="label-text"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="prevPageButton" text="← Previous" styleClass="button-sidebar" disable="true"/>
+                    <Label text="Page 1 of 2" styleClass="label-text"/>
+                    <Button fx:id="nextPageButton" text="Next →" styleClass="button-sidebar"/>
+                </HBox>
+            </VBox>
+        </VBox>
+    </center>
+
+    <!-- Right Panel - Alarm Details -->
+    <right>
+        <VBox spacing="15" prefWidth="350">
+            <padding>
+                <Insets top="20" right="20" bottom="20" left="10"/>
+            </padding>
+            
+            <!-- Selected Alarm Details -->
+            <VBox spacing="15" styleClass="card-elevated" VBox.vgrow="ALWAYS">
+                <padding>
+                    <Insets top="20" right="20" bottom="20" left="20"/>
+                </padding>
+                
+                <Label text="ALARM DETAILS" styleClass="subtitle-text"/>
+                
+                <VBox fx:id="alarmDetailsContainer" spacing="15">
+                    <Label text="Select an alarm to view details" styleClass="label-text" 
+                           style="-fx-font-style: italic; -fx-text-fill: #8fa3bd;"/>
+                </VBox>
+                
+                <!-- Hidden Details Template -->
+                <VBox fx:id="alarmDetailsContent" spacing="15" visible="false" managed="false">
+                    <VBox spacing="8">
+                        <Label text="Severity:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <HBox spacing="10">
+                            <Region fx:id="severityIndicator" prefWidth="12" prefHeight="12" style="-fx-background-radius: 6;"/>
+                            <Label fx:id="detailSeverity" text="CRITICAL" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                        </HBox>
+                    </VBox>
+                    
+                    <VBox spacing="8">
+                        <Label text="State:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Label fx:id="detailState" text="ACTIVE" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                    </VBox>
+                    
+                    <VBox spacing="8">
+                        <Label text="Source:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Label fx:id="detailSource" text="PUMP_1" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                    </VBox>
+                    
+                    <VBox spacing="8">
+                        <Label text="Description:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Label fx:id="detailDescription" text="Pump 1 temperature above threshold" 
+                               styleClass="label-text" style="-fx-font-size: 13px; -fx-wrap-text: true;"/>
+                    </VBox>
+                    
+                    <VBox spacing="8">
+                        <Label text="Current Value:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Label fx:id="detailValue" text="78.5°C (Threshold: 75°C)" 
+                               styleClass="value-text" style="-fx-font-size: 14px;"/>
+                    </VBox>
+                    
+                    <VBox spacing="8">
+                        <Label text="Time:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Label fx:id="detailTime" text="2024-01-15 14:32:45" 
+                               styleClass="value-text" style="-fx-font-size: 14px;"/>
+                    </VBox>
+                    
+                    <VBox spacing="8">
+                        <Label text="Duration:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Label fx:id="detailDuration" text="15 minutes" 
+                               styleClass="value-text" style="-fx-font-size: 14px;"/>
+                    </VBox>
+                    
+                    <Separator style="-fx-background-color: #1a3a5c;"/>
+                    
+                    <VBox spacing="10">
+                        <Label text="ACTIONS" styleClass="kpi-title"/>
+                        <HBox spacing="10">
+                            <Button fx:id="acknowledgeButton" text="Acknowledge" styleClass="button-primary" prefWidth="120"/>
+                            <Button fx:id="clearButton" text="Clear" styleClass="button-secondary" prefWidth="120"/>
+                        </HBox>
+                        <Button fx:id="addNoteButton" text="Add Note" styleClass="button-secondary" prefWidth="250"/>
+                    </VBox>
+                </VBox>
+            </VBox>
+            
+            <!-- Alarm History -->
+            <VBox spacing="15" styleClass="card">
+                <padding>
+                    <Insets top="15" right="15" bottom="15" left="15"/>
+                </padding>
+                <Label text="RECENT HISTORY" styleClass="subtitle-text" style="-fx-font-size: 14px;"/>
+                
+                <VBox spacing="8">
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Region prefWidth="8" prefHeight="8" style="-fx-background-color: #00ff9d; -fx-background-radius: 4;"/>
+                        <VBox spacing="2">
+                            <Label text="PUMP_2 - Normal" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                            <Label text="2 min ago" styleClass="label-text" style="-fx-font-size: 11px; -fx-text-fill: #8fa3bd;"/>
+                        </VBox>
+                    </HBox>
+                    
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Region prefWidth="8" prefHeight="8" style="-fx-background-color: #00ff9d; -fx-background-radius: 4;"/>
+                        <VBox spacing="2">
+                            <Label text="TANK_A - Level OK" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                            <Label text="5 min ago" styleClass="label-text" style="-fx-font-size: 11px; -fx-text-fill: #8fa3bd;"/>
+                        </VBox>
+                    </HBox>
+                    
+                    <HBox spacing="10" alignment="CENTER_LEFT">
+                        <Region prefWidth="8" prefHeight="8" style="-fx-background-color: #ff9d00; -fx-background-radius: 4;"/>
+                        <VBox spacing="2">
+                            <Label text="TEMP - Warning cleared" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                            <Label text="12 min ago" styleClass="label-text" style="-fx-font-size: 11px; -fx-text-fill: #8fa3bd;"/>
+                        </VBox>
+                    </HBox>
+                </VBox>
+            </VBox>
+        </VBox>
+    </right>
+
+</BorderPane>

@@ -18,6 +18,12 @@ from .models import (
     OperatorJournalEntry,
     InAppNotification,
     NotificationSubscription,
+    MaintenanceTask,
+    ProcessSetpoint,
+    WaterQualityMetric,
+    EquipmentHealth,
+    OperatorActionLog,
+    AIFinding,
 )
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
@@ -29,6 +35,16 @@ class MyTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['role'] = user.role  # Add role to the JWT payload
         token['username'] = user.username
         return token
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data['user'] = {
+            'id': self.user.id,
+            'username': self.user.username,
+            'email': self.user.email,
+            'role': self.user.role,
+        }
+        return data
 
 # 2. User Serializer for Registration
 class RegisterSerializer(serializers.ModelSerializer):
@@ -79,6 +95,12 @@ class ComplaintSerializer(serializers.ModelSerializer):
             'updated_at',
             'first_response_at',
         ]
+        read_only_fields = ['id', 'user', 'status', 'created_at', 'updated_at', 'first_response_at']
+
+    def create(self, validated_data):
+        # Set default status to 'pending' for new complaints
+        validated_data['status'] = 'pending'
+        return super().create(validated_data)
 
 class ComplaintUpdateSerializer(serializers.ModelSerializer):
     """ Used by Operators/Admins to change status """
@@ -112,6 +134,45 @@ class ResetPasswordSerializer(serializers.Serializer):
         if attrs['new_password'] != attrs['confirm_password']:
             raise serializers.ValidationError({"confirm_password": ["Passwords do not match."]})
         return attrs
+
+
+class OperatorActionLogSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source='user.username', read_only=True)
+    tag_name = serializers.CharField(source='target_tag.name', read_only=True, default=None)
+
+    class Meta:
+        model = OperatorActionLog
+        fields = [
+            'id',
+            'user',
+            'username',
+            'action_type',
+            'target_tag',
+            'tag_name',
+            'description',
+            'old_value',
+            'new_value',
+            'ip_address',
+            'created_at',
+        ]
+        read_only_fields = ['user', 'created_at']
+
+
+class AIFindingSerializer(serializers.ModelSerializer):
+    tag_name = serializers.CharField(source='tag.name', read_only=True, default=None)
+
+    class Meta:
+        model = AIFinding
+        fields = [
+            'id',
+            'finding_type',
+            'tag',
+            'tag_name',
+            'alarm_event',
+            'result_json',
+            'created_at',
+        ]
+        read_only_fields = ['created_at']
 
 
 class ChatThreadSerializer(serializers.ModelSerializer):
@@ -212,9 +273,15 @@ class AlarmEventSerializer(serializers.ModelSerializer):
     rule_name = serializers.CharField(source='rule.name', read_only=True)
     tag_id = serializers.IntegerField(source='rule.tag_id', read_only=True)
     tag_name = serializers.CharField(source='rule.tag.name', read_only=True)
-    acknowledged_by_username = serializers.CharField(source='acknowledged_by.username', read_only=True)
-    shelved_by_username = serializers.CharField(source='shelved_by.username', read_only=True)
+    acknowledged_by_username = serializers.SerializerMethodField(read_only=True)
+    shelved_by_username = serializers.SerializerMethodField(read_only=True)
     severity = serializers.CharField(source='rule.severity', read_only=True)
+
+    def get_acknowledged_by_username(self, obj):
+        return obj.acknowledged_by.username if obj.acknowledged_by else None
+
+    def get_shelved_by_username(self, obj):
+        return obj.shelved_by.username if obj.shelved_by else None
 
     class Meta:
         model = AlarmEvent
@@ -259,11 +326,130 @@ class AlarmShelveSerializer(serializers.Serializer):
 
 
 class PlantEquipmentSerializer(serializers.ModelSerializer):
-    primary_tag_name = serializers.CharField(source='primary_tag.name', read_only=True)
+    primary_tag_name = serializers.SerializerMethodField(read_only=True)
+
+    def get_primary_tag_name(self, obj):
+        return obj.primary_tag.name if obj.primary_tag else None
 
     class Meta:
         model = PlantEquipment
         fields = ['id', 'area', 'code', 'name', 'primary_tag', 'primary_tag_name', 'map_rect']
+
+
+class MaintenanceTaskSerializer(serializers.ModelSerializer):
+    asset_name = serializers.SerializerMethodField(read_only=True)
+    created_by_username = serializers.SerializerMethodField(read_only=True)
+    assigned_to_username = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = MaintenanceTask
+        fields = [
+            'id',
+            'asset',
+            'asset_name',
+            'title',
+            'description',
+            'status',
+            'priority',
+            'created_by',
+            'created_by_username',
+            'assigned_to',
+            'assigned_to_username',
+            'planned_start',
+            'planned_end',
+            'completed_at',
+            'notes',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['created_by', 'created_at', 'updated_at']
+
+    def get_asset_name(self, obj):
+        return obj.asset.name if obj.asset else None
+
+    def get_created_by_username(self, obj):
+        return obj.created_by.username if obj.created_by else None
+
+    def get_assigned_to_username(self, obj):
+        return obj.assigned_to.username if obj.assigned_to else None
+
+    def create(self, validated_data):
+        user = self.context['request'].user
+        return MaintenanceTask.objects.create(created_by=user, **validated_data)
+
+
+class ProcessSetpointSerializer(serializers.ModelSerializer):
+    tag_name = serializers.SerializerMethodField(read_only=True)
+
+    def get_tag_name(self, obj):
+        return obj.tag.name if obj.tag else None
+
+    class Meta:
+        model = ProcessSetpoint
+        fields = [
+            'id',
+            'tag',
+            'tag_name',
+            'target_value',
+            'tolerance',
+            'mode',
+            'description',
+            'effective_from',
+            'effective_until',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+
+
+class WaterQualityMetricSerializer(serializers.ModelSerializer):
+    area_name = serializers.SerializerMethodField(read_only=True)
+    tag_name = serializers.SerializerMethodField(read_only=True)
+
+    def get_area_name(self, obj):
+        return obj.area.name if obj.area else None
+
+    def get_tag_name(self, obj):
+        return obj.tag.name if obj.tag else None
+
+    class Meta:
+        model = WaterQualityMetric
+        fields = [
+            'id',
+            'area',
+            'area_name',
+            'tag',
+            'tag_name',
+            'metric_name',
+            'current_value',
+            'unit',
+            'status',
+            'threshold_low',
+            'threshold_high',
+            'last_updated',
+            'created_at',
+        ]
+        read_only_fields = ['last_updated', 'created_at']
+
+
+class EquipmentHealthSerializer(serializers.ModelSerializer):
+    equipment_name = serializers.CharField(source='equipment.name', read_only=True)
+
+    class Meta:
+        model = EquipmentHealth
+        fields = [
+            'id',
+            'equipment',
+            'equipment_name',
+            'health_score',
+            'condition',
+            'last_inspection_at',
+            'next_due_at',
+            'recommended_action',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['created_at', 'updated_at']
 
 
 class TrendAnnotationSerializer(serializers.ModelSerializer):

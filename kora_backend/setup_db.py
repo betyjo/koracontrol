@@ -14,11 +14,13 @@ def setup_db():
         with conn.cursor() as cur:
             # Check if user exists, if not create
             cur.execute("SELECT 1 FROM pg_roles WHERE rolname='kora_user'")
+            import os
+            db_password = os.environ.get('DB_PASSWORD', 'kora_password123')
             if not cur.fetchone():
-                cur.execute("CREATE USER kora_user WITH PASSWORD 'kora_password123'")
+                cur.execute(f"CREATE USER kora_user WITH PASSWORD '{db_password}'")
                 print("Created user kora_user")
             else:
-                cur.execute("ALTER USER kora_user WITH PASSWORD 'kora_password123'")
+                cur.execute(f"ALTER USER kora_user WITH PASSWORD '{db_password}'")
                 print("Updated password for kora_user")
             
             # Check if database exists

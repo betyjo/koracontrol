@@ -8,6 +8,7 @@ import {
     Receipt,
     MessageSquare,
     Bot,
+    Brain,
     LogOut,
     Settings,
     Menu,
@@ -16,12 +17,22 @@ import {
     Building2,
     BookOpen,
     Bell,
+    HelpCircle,
+    Layers,
+    Wrench,
+    ClipboardList,
+    ShieldCheck,
+    FileText,
+    Clock,
+    Users,
+    Target,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/context/ToastContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { hasValidToken } from '@/lib/auth';
 import { ConfirmationModal } from '@/components/ConfirmationModal';
+import { getUserRole, shouldShowNavItem, UserRole } from '@/lib/permissions';
 
 export default function DashboardLayout({
     children,
@@ -34,7 +45,13 @@ export default function DashboardLayout({
     const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
-    const [userRole, setUserRole] = useState<string>('CUSTOMER');
+    const [userRole, setUserRole] = useState<UserRole>('CUSTOMER');
+
+    useEffect(() => {
+        const role = getUserRole() ?? 'CUSTOMER';
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setUserRole(role);
+    }, []);
 
     useEffect(() => {
         if (!hasValidToken()) {
@@ -43,22 +60,6 @@ export default function DashboardLayout({
                 sessionStorage.setItem('authExpiredToastShown', '1');
             }
             router.replace('/login');
-        } else {
-            // Extract role from token
-            const token = localStorage.getItem('token');
-            if (token) {
-                try {
-                    const parts = token.split('.');
-                    if (parts.length === 3) {
-                        const decoded = JSON.parse(atob(parts[1]));
-                        let role = (decoded.role || 'CUSTOMER').toUpperCase();
-                        if (role === 'USER') role = 'CUSTOMER';
-                        setUserRole(role);
-                    }
-                } catch (err) {
-                    console.error('Failed to decode token:', err);
-                }
-            }
         }
     }, [router, showToast]);
 
@@ -76,23 +77,33 @@ export default function DashboardLayout({
         router.push('/login');
     };
 
-    // All available navigation items
+    // All available navigation items with role restrictions
     const allNavItems = [
         { name: 'Monitoring', href: '/dashboard', icon: BarChart3, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
         { name: 'Trends', href: '/dashboard/trends', icon: TrendingUp, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
         { name: 'Plant Overview', href: '/dashboard/plant-overview', icon: Building2, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
-        { name: 'Journal', href: '/dashboard/journal', icon: BookOpen, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
+        { name: 'Operations', href: '/dashboard/operations', icon: Wrench, roles: ['ADMIN', 'OPERATOR'] },
+        { name: 'Assets', href: '/dashboard/assets', icon: Layers, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
+        { name: 'Maintenance', href: '/dashboard/maintenance', icon: ClipboardList, roles: ['ADMIN', 'OPERATOR'] },
+        { name: 'Quality', href: '/dashboard/quality', icon: ShieldCheck, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
+        { name: 'Reports', href: '/dashboard/reports', icon: FileText, roles: ['ADMIN', 'OPERATOR'] },
+        { name: 'Journal', href: '/dashboard/journal', icon: BookOpen, roles: ['ADMIN', 'OPERATOR'] }, // Operators and Admins only
+        { name: 'Events', href: '/dashboard/events', icon: Clock, roles: ['ADMIN', 'OPERATOR'] },
+        { name: 'Shifts', href: '/dashboard/shifts', icon: Users, roles: ['ADMIN', 'OPERATOR'] },
+        { name: 'Performance', href: '/dashboard/performance', icon: Target, roles: ['ADMIN', 'OPERATOR'] },
         { name: 'Alarms', href: '/dashboard/alarms', icon: BellRing, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
         { name: 'Billing', href: '/dashboard/billing', icon: Receipt, roles: ['ADMIN', 'CUSTOMER'] },
         { name: 'Complaints', href: '/dashboard/complaints', icon: MessageSquare, roles: ['ADMIN', 'CUSTOMER'] },
         { name: 'AI Assistant', href: '/dashboard/ai-chat', icon: Bot, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
         { name: 'AI Analytics', href: '/dashboard/analytics', icon: Sparkles, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
+        { name: 'AI Insights', href: '/dashboard/ai-insights', icon: Brain, roles: ['ADMIN', 'OPERATOR'] },
         { name: 'Notifications', href: '/dashboard/notifications', icon: Bell, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
+        { name: 'Help', href: '/dashboard/help', icon: HelpCircle, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
         { name: 'Settings', href: '/dashboard/settings', icon: Settings, roles: ['ADMIN', 'OPERATOR', 'CUSTOMER'] },
     ];
 
-    // Filter nav items based on user role
-    const navItems = allNavItems.filter(item => item.roles.includes(userRole));
+    // Filter nav items based on user role using permission utility
+    const navItems = allNavItems.filter(item => shouldShowNavItem(userRole, item.roles as UserRole[]));
 
     const toggleDesktopSidebar = () => setIsDesktopSidebarOpen(!isDesktopSidebarOpen);
     const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
@@ -109,24 +120,30 @@ export default function DashboardLayout({
             <aside className={`flex flex-col shrink-0 ${isDesktopSidebarOpen ? 'w-64' : 'w-20'} bg-white dark:bg-slate-900 border-r dark:border-slate-800 shadow-sm transition-all duration-300 max-md:hidden`}>
                 <div className="p-4 border-b dark:border-slate-800 flex justify-between items-center">
                     {isDesktopSidebarOpen && (
-                        <button 
+                        <button
                             onClick={toggleDesktopSidebar}
                             className="flex items-center gap-2 group cursor-pointer"
                         >
-                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
-                                <span className="text-white font-bold text-xl">K</span>
-                            </div>
+                            <img
+                                src="/kora-logo.png"
+                                alt="Kora Control Logo"
+                                className="w-8 h-8 rounded-lg object-cover shadow-lg shadow-blue-500/20"
+                            />
                             <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400">
                                 Kora Control
                             </span>
                         </button>
                     )}
                     {!isDesktopSidebarOpen && (
-                        <button 
+                        <button
                             onClick={toggleDesktopSidebar}
-                            className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20 group cursor-pointer"
+                            className="w-8 h-8 rounded-lg overflow-hidden shadow-lg shadow-blue-500/20 group cursor-pointer"
                         >
-                            <span className="text-white font-bold text-xl">K</span>
+                            <img
+                                src="/kora-logo.png"
+                                alt="Kora Control Logo"
+                                className="w-8 h-8 object-cover"
+                            />
                         </button>
                     )}
                     <div className="flex items-center gap-2">
@@ -196,9 +213,11 @@ export default function DashboardLayout({
                 }`}>
                 <div className="p-6 border-b dark:border-slate-800 flex justify-between items-center">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                            <span className="text-white font-bold text-xl">K</span>
-                        </div>
+                        <img
+                            src="/kora-logo.png"
+                            alt="Kora Control Logo"
+                            className="w-8 h-8 rounded-lg object-cover"
+                        />
                         <span className="text-xl font-bold dark:text-white">Kora Control</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -242,9 +261,11 @@ export default function DashboardLayout({
                 {/* Top Navbar for Mobile */}
                 <header className="hidden max-md:flex bg-white dark:bg-slate-900 border-b dark:border-slate-800 px-6 py-4 justify-between items-center shrink-0 transition-colors duration-500">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                            <span className="text-white font-bold text-xl">K</span>
-                        </div>
+                        <img
+                            src="/kora-logo.png"
+                            alt="Kora Control Logo"
+                            className="w-8 h-8 rounded-lg object-cover"
+                        />
                         <span className="text-lg font-bold dark:text-white">Kora Control</span>
                     </div>
                     <div className="flex items-center gap-2">

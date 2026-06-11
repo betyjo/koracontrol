@@ -1,6 +1,7 @@
 "use client";
-import { useLayoutEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import api from '@/lib/api';
+import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/context/ToastContext';
 import Link from 'next/link';
@@ -9,6 +10,7 @@ import { PageTransition } from '@/components/PageTransition';
 import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { hasValidToken } from '@/lib/auth';
 import { useGoogleLogin } from '@react-oauth/google';
+import { getUserRole, getWelcomeMessage } from '@/lib/permissions';
 
 export default function LoginPage() {
     const [form, setForm] = useState({ username: '', password: '' });
@@ -17,10 +19,46 @@ export default function LoginPage() {
     const router = useRouter();
     const { showToast } = useToast();
 
-    useLayoutEffect(() => {
+    const handleGoogleCode = useCallback(async (code: string) => {
+        setIsLoading(true);
+        try {
+            const res = await api.post('auth/google/', { code });
+            const userRole = res.data.user?.role;
+            if (userRole) {
+                // All roles can log in via frontend with appropriate permissions
+                const normalizedRole = getUserRole();
+                const welcomeMsg = normalizedRole ? getWelcomeMessage(normalizedRole) : "Welcome";
+                showToast(`${welcomeMsg}! Logged in successfully.`, "success");
+            }
+            localStorage.setItem('token', res.data.access);
+            router.push('/dashboard');
+        } catch (err: unknown) {
+            let errorMsg = "Google authentication failed";
+            if (axios.isAxiosError(err)) {
+                errorMsg = err.response?.data?.error || errorMsg;
+            }
+            showToast(errorMsg, "error");
+            setIsLoading(false);
+        }
+    }, [router, showToast]);
+
+    useEffect(() => {
         if (hasValidToken()) {
             if (typeof window !== 'undefined') {
                 sessionStorage.removeItem('authExpiredToastShown');
+            }
+            const token = localStorage.getItem('token');
+            if (token) {
+                try {
+                    const parts = token.split('.');
+                    if (parts.length === 3) {
+                        const decoded = JSON.parse(atob(parts[1]));
+                        const role = (decoded.role || 'CUSTOMER').toLowerCase();
+                        // All roles are allowed - dashboard handles role-based rendering
+                    }
+                } catch (err) {
+                    console.error('Failed to decode token:', err);
+                }
             }
             router.push('/dashboard');
             return;
@@ -40,29 +78,21 @@ export default function LoginPage() {
                 showToast("Google authentication was cancelled or failed.", "error");
             }
         }
-    }, [router]);
-
-    const handleGoogleCode = async (code: string) => {
-        setIsLoading(true);
-        try {
-            const res = await api.post('auth/google/', { code });
-            localStorage.setItem('token', res.data.access);
-            showToast("Logged in with Google successfully!", "success");
-            router.push('/dashboard');
-        } catch (err: any) {
-            const errorMsg = err.response?.data?.error || "Google authentication failed";
-            showToast(errorMsg, "error");
-            setIsLoading(false);
-        }
-    };
+    }, [router, handleGoogleCode, showToast]);
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
         try {
             const res = await api.post('auth/login/', form);
+            const userRole = res.data.user?.role;
+            if (userRole) {
+                // All roles can log in via frontend with appropriate permissions
+                const normalizedRole = getUserRole();
+                const welcomeMsg = normalizedRole ? getWelcomeMessage(normalizedRole) : "Welcome";
+                showToast(`${welcomeMsg}! Logged in successfully.`, "success");
+            }
             localStorage.setItem('token', res.data.access);
-            showToast("Logged in successfully!", "success");
             router.push('/dashboard');
         } catch {
             showToast("Invalid credentials", "error");
@@ -74,7 +104,7 @@ export default function LoginPage() {
     const googleLogin = useGoogleLogin({
         flow: 'auth-code',
         ux_mode: 'redirect',
-        redirect_uri: 'http://localhost:3000/login',
+        redirect_uri: process.env.NEXT_PUBLIC_GOOGLE_REDIRECT_URI || 'http://localhost:3000/login',
     });
 
     const handleSocialLogin = (provider: string) => {
@@ -141,59 +171,60 @@ export default function LoginPage() {
                         </div>
                     </div>
 
-                    <button 
-                        type="submit" 
+                    <div className="flex justify-end mb-6">
+                        <Link href="/forgot-password" className="text-sm text-blue-600 dark:text-blue-400 font-semibold hover:underline">
+                            Forgot password?
+                        </Link>
+                    </div>
+
+                    <button
+                        type="submit"
                         disabled={isLoading}
-                        className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-500/30 active:scale-[0.98] transition-all transform mb-6 cursor-pointer flex items-center justify-center disabled:opacity-70 disabled:cursor-not-allowed"
+                        className="w-full py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white font-bold rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl hover:-translate-y-0.5 disabled:hover:translate-y-0 disabled:hover:shadow-lg flex items-center justify-center gap-2"
                     >
                         {isLoading ? (
                             <>
-                                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                Signing In...
+                                <Loader2 className="animate-spin" size={20} />
+                                Signing in...
                             </>
                         ) : (
                             'Sign In'
                         )}
                     </button>
 
-                    <div className="relative my-8">
-                        <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t border-slate-200 dark:border-slate-800"></span>
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-white dark:bg-slate-900 px-4 text-slate-500 dark:text-slate-400 font-medium">Or continue with</span>
-                        </div>
+                    <div className="my-6 flex items-center">
+                        <div className="flex-1 border-t border-slate-200 dark:border-slate-700"></div>
+                        <span className="px-4 text-sm text-slate-400 dark:text-slate-600">or continue with</span>
+                        <div className="flex-1 border-t border-slate-200 dark:border-slate-700"></div>
                     </div>
 
-                    <div className="flex justify-center gap-6 mb-8">
-                        <button 
-                            type="button" 
+                    <div className="grid grid-cols-2 gap-4">
+                        <button
+                            type="button"
                             onClick={() => handleSocialLogin('Google')}
-                            className="w-12 h-12 flex items-center justify-center border border-slate-200 dark:border-slate-800 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-sm hover:shadow-md active:scale-95 group"
+                            className="flex items-center justify-center gap-2 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all font-medium text-slate-700 dark:text-slate-300"
                         >
                             <GoogleIcon />
+                            Google
                         </button>
-                        <button 
-                            type="button" 
+                        <button
+                            type="button"
                             onClick={() => handleSocialLogin('Apple')}
-                            className="w-12 h-12 flex items-center justify-center border border-slate-200 dark:border-slate-800 rounded-full hover:bg-slate-50 dark:hover:bg-slate-800 transition-all cursor-pointer shadow-sm hover:shadow-md active:scale-95 text-slate-900 dark:text-white group"
+                            className="flex items-center justify-center gap-2 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition-all font-medium text-slate-700 dark:text-slate-300"
                         >
                             <AppleIcon />
+                            Apple
                         </button>
                     </div>
 
-                    <p className="text-center text-sm text-slate-600 dark:text-slate-400">
-                        Don&apos;t have an account? <Link href="/register" className="text-blue-600 dark:text-blue-400 font-bold hover:underline">Create Account</Link>
-                    </p>
-                    <p className="text-center text-sm text-slate-600 dark:text-slate-400 mt-2">
-                        Forgot your password? <Link href="/forgot-password" className="text-blue-600 dark:text-blue-400 font-bold hover:underline">Reset here</Link>
+                    <p className="mt-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                        Don&apos;t have an account?{' '}
+                        <Link href="/register" className="text-blue-600 dark:text-blue-400 font-semibold hover:underline">
+                            Sign up
+                        </Link>
                     </p>
                 </form>
             </PageTransition>
-
-            {/* Aesthetic background elements */}
-            <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl" />
-            <div className="absolute top-24 right-24 w-96 h-96 bg-purple-500/5 rounded-full blur-3xl" />
         </div>
     );
 }

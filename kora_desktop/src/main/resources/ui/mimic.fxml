@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.*?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            fx:id="rootPane" style="-fx-background-color: #071426;">
+
+    <!-- Toolbar -->
+    <top>
+        <VBox spacing="10">
+            <padding>
+                <Insets top="20" right="20" bottom="10" left="20"/>
+            </padding>
+            <HBox alignment="CENTER_LEFT" spacing="15">
+                <Label text="P&amp;ID MIMIC" styleClass="title-text" style="-fx-font-size: 28px;"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label text="Mode:" styleClass="label-text"/>
+                <ToggleButton fx:id="flowModeToggle" text="Flow" selected="true" styleClass="button-sidebar"/>
+                <ToggleButton fx:id="electricalModeToggle" text="Electrical" styleClass="button-sidebar"/>
+                <Region prefWidth="20"/>
+                <Button fx:id="resetZoomBtn" text="Reset View" styleClass="button-secondary"/>
+                <Label text="|" style="-fx-text-fill: #1a3a5c;"/>
+                <Label text="LIVE" styleClass="status-online"/>
+            </HBox>
+        </VBox>
+    </top>
+
+    <!-- Center: Mimic Canvas (built programmatically) -->
+    <center>
+        <ScrollPane fx:id="scrollPane" fitToWidth="true" fitToHeight="true"
+                    style="-fx-background-color: transparent; -fx-border-color: transparent;">
+            <!-- Content set by controller -->
+        </ScrollPane>
+    </center>
+
+    <!-- Bottom Status Bar -->
+    <bottom>
+        <HBox spacing="20" alignment="CENTER_LEFT" style="-fx-background-color: #0a1525; -fx-border-color: #1a3a5c; -fx-border-width: 1 0 0 0;">
+            <padding>
+                <Insets top="8" right="20" bottom="8" left="20"/>
+            </padding>
+            <Label text="Water Balance:" styleClass="label-text" style="-fx-font-size: 12px;"/>
+            <Label fx:id="waterBalanceLabel" text="In: 0.0 L/min | Out: 0.0 L/min | Δ: 0.0" styleClass="value-text" style="-fx-font-size: 12px;"/>
+            <Region HBox.hgrow="ALWAYS"/>
+            <Label fx:id="lastUpdateLabel" text="Last update: --" styleClass="label-text" style="-fx-font-size: 11px; -fx-text-fill: #8fa3bd;"/>
+        </HBox>
+    </bottom>
+
+</BorderPane>

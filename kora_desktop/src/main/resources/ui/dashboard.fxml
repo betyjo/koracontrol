@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.chart.LineChart?>
+<?import javafx.scene.chart.NumberAxis?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.ScrollPane?>
+<?import javafx.scene.control.Separator?>
+<?import javafx.scene.layout.*?>
+
+<BorderPane fx:id="rootPane" fx:controller="com.kora.desktop.controller.DashboardController" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            style="-fx-background-color: #071426;">
+
+    <!-- Header with KPI Tiles -->
+    <top>
+        <VBox spacing="20">
+            <padding>
+                <Insets top="20" right="20" bottom="10" left="20"/>
+            </padding>
+            
+            <!-- Dashboard Title -->
+            <HBox alignment="CENTER_LEFT" spacing="15">
+                <Label text="PROCESS OVERVIEW" styleClass="title-text" style="-fx-font-size: 28px;"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="mqttStatusLabel" text="MQTT: CONNECTING..." styleClass="label-text"/>
+                <Label fx:id="liveStatusLabel" text="STANDBY" styleClass="status-offline"/>
+            </HBox>
+            
+            <!-- KPI Tiles Row -->
+            <HBox spacing="15" alignment="CENTER">
+                <!-- Flow Rate KPI -->
+                <VBox spacing="10" styleClass="kpi-card" prefWidth="200" prefHeight="120">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="FLOW RATE" styleClass="kpi-title"/>
+                    <HBox alignment="CENTER_LEFT" spacing="5">
+                        <Label fx:id="flowRateValue" text="0.0" styleClass="kpi-value good"/>
+                        <Label text="L/min" styleClass="kpi-unit"/>
+                    </HBox>
+                    <Label fx:id="flowRateStatus" text="Waiting for data..." styleClass="label-text" style="-fx-font-size: 11px;"/>
+                </VBox>
+                
+                <!-- Pressure KPI -->
+                <VBox spacing="10" styleClass="kpi-card" prefWidth="200" prefHeight="120">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="PRESSURE" styleClass="kpi-title"/>
+                    <HBox alignment="CENTER_LEFT" spacing="5">
+                        <Label fx:id="pressureValue" text="0.0" styleClass="kpi-value"/>
+                        <Label text="bar" styleClass="kpi-unit"/>
+                    </HBox>
+                    <Label fx:id="pressureStatus" text="Normal Range: 3-5 bar" styleClass="label-text" style="-fx-font-size: 11px;"/>
+                </VBox>
+                
+                <!-- Temperature KPI -->
+                <VBox spacing="10" styleClass="kpi-card" prefWidth="200" prefHeight="120">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="TEMPERATURE" styleClass="kpi-title"/>
+                    <HBox alignment="CENTER_LEFT" spacing="5">
+                        <Label fx:id="temperatureValue" text="0.0" styleClass="kpi-value"/>
+                        <Label text="°C" styleClass="kpi-unit"/>
+                    </HBox>
+                    <Label fx:id="temperatureStatus" text="Optimal: 60-75°C" styleClass="label-text" style="-fx-font-size: 11px;"/>
+                </VBox>
+                
+                <!-- Tank Level KPI -->
+                <VBox spacing="10" styleClass="kpi-card" prefWidth="200" prefHeight="120">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="TANK A LEVEL" styleClass="kpi-title"/>
+                    <HBox alignment="CENTER_LEFT" spacing="5">
+                        <Label fx:id="tankLevelValue" text="0.0" styleClass="kpi-value"/>
+                        <Label text="\%" styleClass="kpi-unit"/>
+                    </HBox>
+                    <Label fx:id="tankLevelStatus" text="Capacity: 5000L" styleClass="label-text" style="-fx-font-size: 11px;"/>
+                </VBox>
+                
+                <!-- pH Level KPI -->
+                <VBox spacing="10" styleClass="kpi-card" prefWidth="200" prefHeight="120">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="pH LEVEL" styleClass="kpi-title"/>
+                    <HBox alignment="CENTER_LEFT" spacing="5">
+                        <Label fx:id="phValue" text="0.0" styleClass="kpi-value"/>
+                        <Label text="" styleClass="kpi-unit"/>
+                    </HBox>
+                    <Label fx:id="phStatus" text="Optimal: 7.0-7.5" styleClass="label-text" style="-fx-font-size: 11px;"/>
+                </VBox>
+                
+                <!-- Active Alarms KPI -->
+                <VBox spacing="10" styleClass="kpi-card" prefWidth="200" prefHeight="120">
+                    <padding>
+                        <Insets top="15" right="15" bottom="15" left="15"/>
+                    </padding>
+                    <Label text="ACTIVE ALARMS" styleClass="kpi-title"/>
+                    <HBox alignment="CENTER_LEFT" spacing="5">
+                        <Label fx:id="alarmsValue" text="0" styleClass="kpi-value good"/>
+                        <Label text="active" styleClass="kpi-unit"/>
+                    </HBox>
+                    <Label fx:id="alarmsDetail" text="No active alarms" styleClass="label-text" style="-fx-text-fill: #00ff9d; -fx-font-size: 11px;"/>
+                </VBox>
+            </HBox>
+        </VBox>
+    </top>
+
+    <!-- Center Content - Process Visualization -->
+    <center>
+        <ScrollPane fitToWidth="true" fitToHeight="true" style="-fx-background-color: transparent; -fx-border-color: transparent;">
+            <VBox spacing="20">
+                <padding>
+                    <Insets top="10" right="20" bottom="20" left="20"/>
+                </padding>
+                
+                <!-- Process Diagram Section -->
+                <VBox spacing="15" styleClass="card">
+                    <padding>
+                        <Insets top="20" right="20" bottom="20" left="20"/>
+                    </padding>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="15">
+                        <Label text="KORA SCADA SYSTEM" styleClass="subtitle-text"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label text="Live Process Diagram" styleClass="label-text" style="-fx-text-fill: #8fa3bd;"/>
+                    </HBox>
+                    
+                    <!-- Live Process Diagram (built programmatically) -->
+                    <StackPane fx:id="processDiagramPane" 
+                               style="-fx-background-color: #0a1525; -fx-background-radius: 8; -fx-border-color: #1a3a5c; -fx-border-radius: 8; -fx-border-width: 1;" 
+                               prefHeight="400" minHeight="350">
+                        <padding>
+                            <Insets top="10" right="20" bottom="10" left="20"/>
+                        </padding>
+                    </StackPane>
+                </VBox>
+                
+                <!-- Real-time Charts Section -->
+                <VBox spacing="15" styleClass="card">
+                    <padding>
+                        <Insets top="20" right="20" bottom="20" left="20"/>
+                    </padding>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="15">
+                        <Label text="REAL-TIME TRENDS" styleClass="subtitle-text"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label text="Last 60 seconds" styleClass="label-text" style="-fx-text-fill: #8fa3bd;"/>
+                    </HBox>
+                    
+                    <HBox spacing="20">
+                        <!-- Flow Rate Chart -->
+                        <VBox spacing="10" HBox.hgrow="ALWAYS">
+                            <Label text="Flow Rate (L/min)" styleClass="label-text"/>
+                            <LineChart fx:id="flowChart" createSymbols="false" legendVisible="false" 
+                                      styleClass="chart-dark" prefHeight="200">
+                                <xAxis>
+                                    <NumberAxis fx:id="flowXAxis" side="BOTTOM" label="Time (s)" tickLabelFill="#b8c5d6"/>
+                                </xAxis>
+                                <yAxis>
+                                    <NumberAxis fx:id="flowYAxis" side="LEFT" label="Flow Rate" tickLabelFill="#b8c5d6"/>
+                                </yAxis>
+                            </LineChart>
+                        </VBox>
+                        
+                        <!-- Pressure Chart -->
+                        <VBox spacing="10" HBox.hgrow="ALWAYS">
+                            <Label text="Pressure (bar)" styleClass="label-text"/>
+                            <LineChart fx:id="pressureChart" createSymbols="false" legendVisible="false" 
+                                      styleClass="chart-dark" prefHeight="200">
+                                <xAxis>
+                                    <NumberAxis fx:id="pressureXAxis" side="BOTTOM" label="Time (s)" tickLabelFill="#b8c5d6"/>
+                                </xAxis>
+                                <yAxis>
+                                    <NumberAxis fx:id="pressureYAxis" side="LEFT" label="Pressure" tickLabelFill="#b8c5d6"/>
+                                </yAxis>
+                            </LineChart>
+                        </VBox>
+                        
+                        <!-- Temperature Chart -->
+                        <VBox spacing="10" HBox.hgrow="ALWAYS">
+                            <Label text="Temperature (°C)" styleClass="label-text"/>
+                            <LineChart fx:id="temperatureChart" createSymbols="false" legendVisible="false" 
+                                      styleClass="chart-dark" prefHeight="200">
+                                <xAxis>
+                                    <NumberAxis fx:id="temperatureXAxis" side="BOTTOM" label="Time (s)" tickLabelFill="#b8c5d6"/>
+                                </xAxis>
+                                <yAxis>
+                                    <NumberAxis fx:id="temperatureYAxis" side="LEFT" label="Temperature" tickLabelFill="#b8c5d6"/>
+                                </yAxis>
+                            </LineChart>
+                        </VBox>
+                    </HBox>
+                </VBox>
+            </VBox>
+        </ScrollPane>
+    </center>
+
+    <!-- Right Panel - Real-time Stats & Controls -->
+    <right>
+        <VBox spacing="15" prefWidth="280">
+            <padding>
+                <Insets top="20" right="20" bottom="20" left="10"/>
+            </padding>
+            
+            <!-- Quick Stats Panel -->
+            <VBox spacing="15" styleClass="card">
+                <padding>
+                    <Insets top="15" right="15" bottom="15" left="15"/>
+                </padding>
+                <Label text="SYSTEM METRICS" styleClass="subtitle-text"/>
+                
+                <VBox spacing="12">
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Region prefWidth="4" prefHeight="4" style="-fx-background-color: #00ff9d; -fx-background-radius: 2;"/>
+                        <VBox spacing="2">
+                            <Label text="System Uptime" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                            <Label fx:id="uptimeValue" text="--:--:--" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                        </VBox>
+                    </HBox>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Region prefWidth="4" prefHeight="4" style="-fx-background-color: #00d4ff; -fx-background-radius: 2;"/>
+                        <VBox spacing="2">
+                            <Label text="Data Points Received" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                            <Label fx:id="dataPointsValue" text="0" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                        </VBox>
+                    </HBox>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Region prefWidth="4" prefHeight="4" style="-fx-background-color: #ff9d00; -fx-background-radius: 2;"/>
+                        <VBox spacing="2">
+                            <Label text="MQTT Messages" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                            <Label fx:id="mqttMsgCount" text="0" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                        </VBox>
+                    </HBox>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Region prefWidth="4" prefHeight="4" style="-fx-background-color: #ff4444; -fx-background-radius: 2;"/>
+                        <VBox spacing="2">
+                            <Label text="AI Confidence" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                            <Label fx:id="aiConfidenceValue" text="0.0\%" styleClass="value-text" style="-fx-font-size: 14px;"/>
+                        </VBox>
+                    </HBox>
+                </VBox>
+            </VBox>
+            
+            <!-- Equipment Status -->
+            <VBox spacing="15" styleClass="card">
+                <padding>
+                    <Insets top="15" right="15" bottom="15" left="15"/>
+                </padding>
+                <Label text="EQUIPMENT STATUS" styleClass="subtitle-text"/>
+                
+                <VBox spacing="10">
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Label text="Pump 1" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="togglePumpBtn" text="TOGGLE" style="-fx-font-size: 10px; -fx-padding: 2 5 2 5;" onAction="#handleTogglePump"/>
+                        <Label fx:id="pump1Status" text="UNKNOWN" styleClass="status-offline" style="-fx-font-size: 10px;"/>
+                    </HBox>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Label text="Pump 2" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="pump2Status" text="UNKNOWN" styleClass="status-offline" style="-fx-font-size: 10px;"/>
+                    </HBox>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Label text="Inlet Valve" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Button fx:id="toggleValveBtn" text="TOGGLE" style="-fx-font-size: 10px; -fx-padding: 2 5 2 5;" onAction="#handleToggleValve"/>
+                        <Label fx:id="valveStatus" text="UNKNOWN" styleClass="status-offline" style="-fx-font-size: 10px;"/>
+                    </HBox>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Label text="Outlet Valve" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="valveOutletStatus" text="UNKNOWN" styleClass="status-offline" style="-fx-font-size: 10px;"/>
+                    </HBox>
+                    
+                    <HBox alignment="CENTER_LEFT" spacing="10">
+                        <Label text="Sensors" styleClass="label-text" style="-fx-font-size: 12px;"/>
+                        <Region HBox.hgrow="ALWAYS"/>
+                        <Label fx:id="sensorsStatus" text="UNKNOWN" styleClass="status-offline" style="-fx-font-size: 10px;"/>
+                    </HBox>
+                </VBox>
+            </VBox>
+            
+            <!-- AI Insights Panel -->
+            <VBox spacing="15" styleClass="card-elevated">
+                <padding>
+                    <Insets top="15" right="15" bottom="15" left="15"/>
+                </padding>
+                <HBox alignment="CENTER_LEFT" spacing="10">
+                    <Label text="AI INSIGHTS" styleClass="subtitle-text"/>
+                    <Label fx:id="aiStatusDot" prefWidth="8" prefHeight="8" style="-fx-background-color: #00ff9d; -fx-background-radius: 4;"/>
+                </HBox>
+                
+                <VBox spacing="10">
+                    <Label fx:id="aiStatusLabel" text="Monitoring" styleClass="label-text" style="-fx-font-size: 12px; -fx-text-fill: #00ff9d;"/>
+                    <Label fx:id="aiInsightMessage" text="AI engine is monitoring all sensor data for anomalies..." 
+                          styleClass="label-text" style="-fx-font-size: 11px; -fx-text-fill: #b8c5d6; -fx-wrap-text: true;"/>
+                    
+                    <Separator style="-fx-background-color: #1a3a5c;"/>
+                    
+                    <Label text="Recent Analysis" styleClass="label-text" style="-fx-font-size: 12px; -fx-text-fill: #00d4ff;"/>
+                    <Label fx:id="aiRecentAnalysis" text="No analysis data yet. Waiting for sensor data..." 
+                          styleClass="label-text" style="-fx-font-size: 11px; -fx-text-fill: #b8c5d6; -fx-wrap-text: true;"/>
+                </VBox>
+            </VBox>
+        </VBox>
+    </right>
+
+</BorderPane>

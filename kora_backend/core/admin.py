@@ -21,6 +21,10 @@ from .models import (
     OperatorJournalEntry,
     InAppNotification,
     NotificationSubscription,
+    MaintenanceTask,
+    ProcessSetpoint,
+    WaterQualityMetric,
+    EquipmentHealth,
 )
 
 @admin.register(User)
@@ -34,12 +38,35 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
     fieldsets = (
         (None, {"fields": ("username", "password")}),
         ("Personal info", {"fields": ("first_name", "last_name", "email", "phone_number")}),
+        ("Biometrics", {"fields": ("profile_photo", "face_encoding")}),
+        ("Billing info", {"fields": ("meter_tag", "billing_rate")}),
         ("Permissions", {"fields": ("role", "is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
         ("Important dates", {"fields": ("last_login", "date_joined")}),
     )
 
+    add_fieldsets = (
+        (None, {
+            "classes": ("wide",),
+            "fields": ("username", "password1", "password2"),
+        }),
+        ("Role Assignment", {
+            "classes": ("wide",),
+            "fields": ("role",),
+            "description": "ADMIN = Web Admin Panel only  |  OPERATOR = Desktop HMI only  |  CUSTOMER = Frontend portal only",
+        }),
+        ("Personal info", {
+            "classes": ("wide",),
+            "fields": ("first_name", "last_name", "email", "phone_number"),
+        }),
+        ("Biometrics", {
+            "classes": ("wide",),
+            "fields": ("profile_photo",),
+            "description": "Upload a clear face photo to enable Face ID Login for this user.",
+        }),
+    )
+
     tab_overview = (
-        (None, {"fields": ("username", "role", "phone_number", "email")}),
+        (None, {"fields": ("username", "role", "phone_number", "email", "meter_tag", "billing_rate", "profile_photo")}),
     )
 
     tab_permissions = (
@@ -51,10 +78,47 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
         ("Permissions", "tab_permissions"),
     ]
 
+    actions = ["generate_bills_action"]
+
+    @admin.action(description="Generate bills for selected customers now")
+    def generate_bills_action(self, request, queryset):
+        from .billing_job import generate_monthly_bills
+        from .models import Bill, TagLog
+        from django.utils import timezone
+        from datetime import timedelta
+        from decimal import Decimal
+        
+        now = timezone.now()
+        thirty_days_ago = now - timedelta(days=30)
+        bills_created = 0
+
+        customers = queryset.filter(role='customer', meter_tag__isnull=False)
+        for customer in customers:
+            if Bill.objects.filter(user=customer, billing_date__month=now.month, billing_date__year=now.year).exists():
+                continue
+                
+            latest_log = TagLog.objects.filter(tag=customer.meter_tag).order_by('-timestamp').first()
+            old_log = TagLog.objects.filter(tag=customer.meter_tag, timestamp__lte=thirty_days_ago).order_by('-timestamp').first()
+            if not old_log:
+                old_log = TagLog.objects.filter(tag=customer.meter_tag).order_by('timestamp').first()
+                
+            if not latest_log or not old_log or latest_log == old_log:
+                continue
+                
+            usage = max(0, latest_log.value - old_log.value)
+            amount = Decimal(usage) * customer.billing_rate
+            
+            if amount > 0:
+                Bill.objects.create(user=customer, amount=amount, usage_kwh=usage)
+                bills_created += 1
+
+        self.message_user(request, f"Successfully generated {bills_created} bills.")
+
 @admin.register(Tag)
 class TagAdmin(ModelAdmin):
-    list_display = ("name", "data_type", "unit")
+    list_display = ("name", "data_type", "unit", "retention_days")
     search_fields = ("name",)
+    fields = ("name", "data_type", "unit", "description", "retention_days")
 
 @admin.register(TagLog)
 class TagLogAdmin(ModelAdmin):
@@ -218,6 +282,47 @@ class PlantEquipmentAdmin(ModelAdmin):
     list_display = ("code", "name", "area", "primary_tag")
     list_filter = ("area",)
     search_fields = ("code", "name")
+
+
+@admin.register(MaintenanceTask)
+class MaintenanceTaskAdmin(ModelAdmin):
+    list_display = (
+        "title",
+        "asset",
+        "status",
+        "priority",
+        "created_by",
+        "assigned_to",
+        "planned_start",
+        "planned_end",
+    )
+    list_filter = ("status", "priority", "asset__area")
+    search_fields = ("title", "description", "asset__name")
+    autocomplete_fields = ("asset", "created_by", "assigned_to")
+
+
+@admin.register(ProcessSetpoint)
+class ProcessSetpointAdmin(ModelAdmin):
+    list_display = ("tag", "target_value", "mode", "effective_from", "effective_until")
+    list_filter = ("mode", "tag")
+    search_fields = ("tag__name", "description")
+    autocomplete_fields = ("tag",)
+
+
+@admin.register(WaterQualityMetric)
+class WaterQualityMetricAdmin(ModelAdmin):
+    list_display = ("metric_name", "area", "tag", "current_value", "status", "last_updated")
+    list_filter = ("status", "area")
+    search_fields = ("metric_name", "tag__name")
+    autocomplete_fields = ("area", "tag")
+
+
+@admin.register(EquipmentHealth)
+class EquipmentHealthAdmin(ModelAdmin):
+    list_display = ("equipment", "health_score", "last_inspection_at", "next_due_at")
+    list_filter = ("equipment__area",)
+    search_fields = ("equipment__name", "recommended_action")
+    autocomplete_fields = ("equipment",)
 
 
 @admin.register(TrendAnnotation)

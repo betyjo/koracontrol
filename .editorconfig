@@ -1,0 +1,24 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{py,java,ts,tsx,js,jsx,json,md}]
+indent_style = space
+indent_size = 2
+
+[*.{css,scss}]
+indent_style = space
+indent_size = 2
+
+# JavaFX CSS files - relaxed linting
+[kora_desktop/src/main/resources/**.css]
+# JavaFX CSS doesn't require vendor prefixes like web browsers
+# Linters should treat these files differently than standard web CSS
+
+[*.{xml,fxml}]
+indent_style = space
+indent_size = 2

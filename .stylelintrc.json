@@ -1,0 +1,18 @@
+{
+  "extends": "stylelint-config-standard",
+  "rules": {
+    "property-no-vendor-prefix": null,
+    "value-no-vendor-prefix": null,
+    "selector-pseudo-class-no-unknown": [true, {
+      "ignorePseudoClasses": ["deep"]
+    }],
+    "selector-pseudo-element-no-unknown": [true, {
+      "ignorePseudoElements": ["v-deep", "v-global"]
+    }]
+  },
+  "ignoreFiles": [
+    "kora_desktop/src/main/resources/**/*.css",
+    "**/node_modules/**",
+    ".next/**"
+  ]
+}

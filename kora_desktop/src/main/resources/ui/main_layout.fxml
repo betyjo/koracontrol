@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Region?>
+<?import javafx.scene.layout.VBox?>
+
+<BorderPane fx:id="rootPane" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
+            style="-fx-background-color: #121212;">
+
+    <!-- Sidebar -->
+    <left>
+        <VBox spacing="10" styleClass="sidebar" fx:id="sidebar">
+            <padding>
+                <Insets top="20" right="10" bottom="20" left="10"/>
+            </padding>
+            
+            <Label text="KORA CONTROL" fx:id="titleLabel" 
+                   style="-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #00ff9d; -fx-padding: 10px 0;"/>
+            
+            <Button text="Dashboard" fx:id="dashboardBtn" styleClass="button-sidebar" 
+                    maxWidth="Infinity" style="-fx-background-color: #00ff9d; -fx-text-fill: #121212; -fx-font-weight: bold;"/>
+            
+            <Button text="P&amp;ID Mimic" fx:id="mimicBtn" styleClass="button-sidebar" 
+                    maxWidth="Infinity"/>
+            
+            <Button text="Controls" fx:id="controlsBtn" styleClass="button-sidebar" 
+                    maxWidth="Infinity"/>
+            
+            <Button text="Alarms" fx:id="alarmsBtn" styleClass="button-sidebar" 
+                    maxWidth="Infinity"/>
+            
+            <Button text="Trends" fx:id="trendsBtn" styleClass="button-sidebar" 
+                    maxWidth="Infinity"/>
+            
+            <Button text="Settings" fx:id="settingsBtn" styleClass="button-sidebar" 
+                    maxWidth="Infinity"/>
+            
+            <VBox VBox.vgrow="ALWAYS"/>
+            
+            <Button text="LOGOUT" fx:id="logoutBtn" styleClass="button-danger" 
+                    maxWidth="Infinity"/>
+        </VBox>
+    </left>
+
+    <!-- Center: Alarm Banner + TabPane -->
+    <center>
+        <VBox>
+            <!-- Alarm Banner (always visible) -->
+            <HBox fx:id="alarmBanner" alignment="CENTER_LEFT" spacing="15" styleClass="alarm-banner">
+                <padding>
+                    <Insets top="8" right="15" bottom="8" left="15"/>
+                </padding>
+                <Label fx:id="alarmBannerIcon" text="🔔" style="-fx-font-size: 16px;"/>
+                <Label fx:id="alarmBannerText" text="No active alarms" 
+                       style="-fx-text-fill: #b8c5d6; -fx-font-size: 13px;" HBox.hgrow="ALWAYS"/>
+                <Region HBox.hgrow="ALWAYS"/>
+                <Label fx:id="alarmBannerCount" text="0 active" 
+                       style="-fx-text-fill: #8fa3bd; -fx-font-size: 12px;"/>
+                <Button fx:id="hornSilenceBtn" text="SILENCE" styleClass="button-sidebar"
+                        style="-fx-font-size: 10px; -fx-padding: 4 10 4 10; -fx-background-color: #1a2f4a; -fx-text-fill: #b8c5d6;"/>
+            </HBox>
+
+            <!-- Tabbed Content Area -->
+            <TabPane fx:id="tabPane" VBox.vgrow="ALWAYS" tabClosingPolicy="UNAVAILABLE">
+                <Tab text="  Overview  " fx:id="overviewTab">
+                    <fx:include source="dashboard.fxml" fx:id="overviewDashboard"/>
+                </Tab>
+                <Tab text="  Diagnostics  " fx:id="diagnosticsTab">
+                    <fx:include source="diagnostics_tab.fxml" fx:id="diagnosticsInclude"/>
+                </Tab>
+                            <Tab text="  Operator SCADA  " fx:id="operatorScadaTab">
+                    <fx:include source="operator_scada.fxml" fx:id="operatorScadaInclude"/>
+                </Tab>
+                </TabPane>
+        </VBox>
+    </center>
+
+</BorderPane>

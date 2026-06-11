@@ -61,10 +61,10 @@ _load_local_env()
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-144u@t^3rm99itul8org=5daox4=twjzbyzsrn_kkt5p-ufkb1'
+SECRET_KEY = os.environ.get('SECRET_KEY', '')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 if DEBUG:
@@ -72,6 +72,17 @@ if DEBUG:
     ALLOWED_HOSTS += ['*']
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Database configuration
+DB_ENGINE = os.environ.get('DB_ENGINE', '').strip().lower()
+DB_NAME = os.environ.get('DB_NAME', 'kora_db').strip()
+DB_USER = os.environ.get('DB_USER', 'kora_user').strip()
+DB_PASSWORD = os.environ.get('DB_PASSWORD', '').strip()
+DB_HOST = os.environ.get('DB_HOST', 'localhost').strip()
+DB_PORT = os.environ.get('DB_PORT', '5432').strip()
+
+if not DB_ENGINE:
+    DB_ENGINE = 'sqlite' if DEBUG and not os.environ.get('DB_NAME') else 'postgresql'
 
 
 # Application definition
@@ -93,6 +104,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'drf_spectacular',
+    'django_apscheduler',
     'core',
 ]
 
@@ -131,19 +143,27 @@ WSGI_APPLICATION = 'kora_control.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'kora_db',
-        'USER': 'kora_user',
-        'PASSWORD': 'kora_password123',
-        'HOST': 'localhost',
-        'PORT': '5432',
-        'OPTIONS': {
-            'options': '-c search_path=kora'
-        },
+if DB_ENGINE in ('sqlite', 'sqlite3'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': DB_NAME,
+            'USER': DB_USER,
+            'PASSWORD': DB_PASSWORD,
+            'HOST': DB_HOST,
+            'PORT': DB_PORT,
+            'OPTIONS': {
+                'options': '-c search_path=kora'
+            },
+        }
+    }
 
 
 # Password validation
@@ -151,16 +171,10 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        'OPTIONS': {
+            'min_length': 4,
+        },
     },
 ]
 
@@ -201,6 +215,10 @@ CHAPA_CURRENCY = os.environ.get("CHAPA_CURRENCY", "ETB")
 CHAPA_TIMEOUT_SECONDS = int(os.environ.get("CHAPA_TIMEOUT_SECONDS", "20"))
 
 # CORS Configuration
+# Supports dev (localhost:3000) and production (set FRONTEND_BASE_URL)
+_frontend_base_url = os.environ.get("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+_frontend_url_https = _frontend_base_url.replace("http://", "https://")
+
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:3001",
@@ -208,23 +226,25 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3001",
 ]
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
-]
+# Add frontend URL from env if not localhost
+if DEBUG and _frontend_base_url not in CORS_ALLOWED_ORIGINS:
+    CORS_ALLOWED_ORIGINS.append(_frontend_base_url)
+    if _frontend_url_https not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(_frontend_url_https)
+
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 
 # Allow local network frontend origins during development (e.g. http://192.168.x.x:3000).
+# Also allow Flutter web dev server on any port (commonly 5173, 8080, or random high ports).
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https?://localhost:30\d{2}$",
-    r"^https?://127\.0\.0\.1:30\d{2}$",
-    r"^https?://\d{1,3}(?:\.\d{1,3}){3}:30\d{2}$",
-]
+    r"^https?://localhost:\d{1,5}$",
+    r"^https?://127\.0\.0\.1:\d{1,5}$",
+    r"^https?://\d{1,3}(?:\.\d{1,3}){3}:\d{1,5}$",
+] if DEBUG else []
 
 # Allow credentials (like JWT headers)
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = False # Set to false since we are using explicit origins
+CORS_ALLOW_ALL_ORIGINS = False
 
 # REST Framework Configuration
 REST_FRAMEWORK = {
@@ -406,3 +426,7 @@ UNFOLD = {
         ],
     },
 }
+
+# SCADA Telemetry Deletion/Retention Settings
+TAGLOG_RETENTION_DAYS = 30
+

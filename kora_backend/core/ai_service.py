@@ -1,5 +1,6 @@
 import os
 from statistics import mean
+import pandas as pd
 
 MODEL_PATH = os.path.join(os.path.dirname(__file__), '../../kora_ai/anomaly_model.pkl')
 
@@ -17,7 +18,9 @@ def run_anomaly_detection(tag_data):
         latest_val = tag_data[0].value if tag_data else 0
         
         # AI Prediction: -1 is Anomaly, 1 is Normal
-        prediction = model.predict([[latest_val]])[0]
+        # Use DataFrame with proper feature names to avoid sklearn warnings
+        df = pd.DataFrame({'value': [latest_val]})
+        prediction = model.predict(df)[0]
         
         if prediction == -1:
             return True, 0.92, f"AI detected statistical outlier. Value {latest_val} is outside learned normal range."
