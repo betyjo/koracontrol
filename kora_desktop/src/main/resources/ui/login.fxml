@@ -25,7 +25,7 @@
         <VBox alignment="CENTER" spacing="15">
             <ImageView fx:id="logoImageView" fitHeight="120" fitWidth="120" 
                        preserveRatio="true" smooth="true">
-                <Image url="@icon.png"/>
+                <Image url="@kora-logo.png"/>
 
             </ImageView>
             <Label text="KORA CONTROL" styleClass="title-text">

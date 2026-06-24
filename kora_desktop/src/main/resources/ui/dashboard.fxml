@@ -7,6 +7,8 @@
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.ScrollPane?>
 <?import javafx.scene.control.Separator?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.scene.layout.*?>
 
 <BorderPane fx:id="rootPane" fx:controller="com.kora.desktop.controller.DashboardController" xmlns="http://javafx.com/javafx/21" xmlns:fx="http://javafx.com/fxml/1"
@@ -21,7 +23,10 @@
             
             <!-- Dashboard Title -->
             <HBox alignment="CENTER_LEFT" spacing="15">
-                <Label text="PROCESS OVERVIEW" styleClass="title-text" style="-fx-font-size: 28px;"/>
+                <ImageView fitWidth="120" fitHeight="36" preserveRatio="true" smooth="true">
+                    <Image url="@kora-logo.png"/>
+                </ImageView>
+                <Label text="PROCESS OVERVIEW" styleClass="title-text" style="-fx-font-size: 28px; -fx-padding: 0 0 0 8px;"/>
                 <Region HBox.hgrow="ALWAYS"/>
                 <Label fx:id="mqttStatusLabel" text="MQTT: CONNECTING..." styleClass="label-text"/>
                 <Label fx:id="liveStatusLabel" text="STANDBY" styleClass="status-offline"/>

@@ -11,7 +11,7 @@
 /* Main Container Styles */
 .login-container {
     -fx-background-color: #071426;
-    -fx-background-image: url("icon.png");
+    -fx-background-image: url("kora-logo.png");
     -fx-background-size: cover;
 }
 
